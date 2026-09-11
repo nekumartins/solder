@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+.env
+*.local
+test-results/
+screenshots/
+*.log
+.DS_Store
+apps/web/dev-dist/
