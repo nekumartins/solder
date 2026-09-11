@@ -46,6 +46,24 @@ mentioned. Technical detail belongs under Settings → Advanced and nowhere else
 `apps/api/src/db.ts`. Everything else talks to the `Store` class. Row casts go through
 `as unknown as XRow[]` because `node:sqlite` returns open record types.
 
+Schema changes go in the `MIGRATIONS` array, tracked by `PRAGMA user_version`. Never edit a
+migration that has shipped — append one. `Store.transaction` is reentrant, because several
+helpers open one internally and SQLite has no nested `BEGIN`.
+
+## A group is a thread with more members
+
+`thread_members` is the only source of truth for who is in a conversation, so chat, payments,
+requests and reactions work in a group without special cases. Group threads park their own id
+in `user_a`/`user_b` so the direct-pair uniqueness constraint cannot collide between them.
+`publishEvent` fans out to every member, not to `from`/`to`.
+
+## Claim links are bearer instruments
+
+The secret lives in the URL fragment and must never be sent to the server, logged, or put in
+`localStorage`. `sessionStorage` carries it across onboarding and is cleared on use. The
+server stores only the holding address and a derivation salt. See SECURITY.md for what this
+trades away.
+
 ## Paths resolve against the repo root
 
 `DATABASE_PATH` and friends resolve from the repository root, not `process.cwd()` — npm
@@ -57,5 +75,11 @@ seed and the server two different databases.
 `node --test` via `tsx`, no framework. Keep the test glob quoted in `package.json` — unquoted,
 the shell expands it and silently runs a subset. `apps/api/src/testkit.ts` gives you an in-memory
 server and `Actor` helpers that sign like a real client. Run `npm test` before pushing;
-`npm run e2e` needs the app running (`npm run seed && npm run dev`, or the preview server on
-:4173 with `ORIGIN` including that port).
+`npm run e2e` and `npm run mvp-test` need the app running (`npm run seed && npm run dev`, or
+the preview server on :4173 with `ORIGIN` including that port). Both drive real passkeys via
+a CDP virtual authenticator. Test runs all come from 127.0.0.1, so raise `RATE_LIMIT_MAX`
+for them rather than lowering the shipped default.
+
+`npm run mvp-test` is the success test from the original brief. If a change makes a stranger
+unable to receive a link, create an account and end up holding money, that test is the one
+that should fail.

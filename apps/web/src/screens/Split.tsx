@@ -6,6 +6,7 @@ import { AmountDisplay, Keypad } from '../components/Keypad.js';
 import { Button } from '../components/Button.js';
 import { Screen } from '../components/Screen.js';
 import { api } from '../lib/api.js';
+import { peopleFrom } from '../lib/people.js';
 import { haptic } from '../lib/haptics.js';
 import { store, useApp } from '../lib/store.js';
 import { friendly } from './Welcome.js';
@@ -19,7 +20,7 @@ export function Split() {
   const [people, setPeople] = useState<PublicUser[]>([]);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setPeople(threads.map((thread) => thread.peer)); }, [threads]);
+  useEffect(() => { setPeople(peopleFrom(threads)); }, [threads]);
 
   const total = tryParseAmount(amount || '0') ?? 0n;
   const ways = chosen.length + 1;

@@ -13,7 +13,17 @@ import { usePinPrompt } from '../lib/usePinPrompt.js';
 import { wallet } from '../lib/wallet.js';
 import { friendly } from './Welcome.js';
 
-const QUICK_EMOJI = ['🍜', '☕', '🎁', '🚕', '🍻', '🎟️', '🏠', '❤️'];
+/** One tap fills in both the emoji and what it was for. */
+const TEMPLATES: ReadonlyArray<{ emoji: string; label: string }> = [
+  { emoji: '🍕', label: 'Lunch' },
+  { emoji: '🍻', label: 'Drinks' },
+  { emoji: '🚕', label: 'Uber' },
+  { emoji: '🎂', label: 'Birthday' },
+  { emoji: '❤️', label: 'Gift' },
+  { emoji: '☕', label: 'Coffee' },
+  { emoji: '🏠', label: 'Rent' },
+  { emoji: '😂', label: 'Pay me back' },
+];
 
 interface Props { mode: 'pay' | 'request' }
 
@@ -29,10 +39,13 @@ export function Pay({ mode }: Props) {
   const [amount, setAmount] = useState(initialAmount(params));
   const [note, setNote] = useState(params.get('for') ?? '');
   const [emoji, setEmoji] = useState<string | null>(null);
+  const [gift, setGift] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
   const requestEventId = params.get('request');
+  // Settling up inside a group keeps the payment in that group's ledger.
+  const threadId = params.get('thread');
   const balance = BigInt(me?.balanceMicros ?? '0');
   const micros = tryParseAmount(amount || '0') ?? 0n;
   const tooMuch = mode === 'pay' && micros > balance;
@@ -78,7 +91,9 @@ export function Pay({ mode }: Props) {
       amountMicros: parseAmount(amount).toString(),
       note: note.trim() || null,
       emoji,
+      gift,
       ...(requestEventId ? { requestEventId } : {}),
+      ...(threadId ? { threadId } : {}),
     });
 
     await api.post<{ event: ThreadEvent }>(`/api/payments/${prepared.paymentId}/submit`, {
@@ -131,17 +146,26 @@ export function Pay({ mode }: Props) {
         />
 
         <div className="note-row">
-          <div className="emoji-row" role="group" aria-label="Add an emoji">
-            {QUICK_EMOJI.map((option) => (
-              <button
-                key={option}
-                className={`emoji-pick ${emoji === option ? 'is-on' : ''}`}
-                onClick={() => { haptic('tap'); setEmoji(emoji === option ? null : option); }}
-                aria-pressed={emoji === option}
-              >
-                {option}
-              </button>
-            ))}
+          <div className="template-row" role="group" aria-label="What is it for?">
+            {TEMPLATES.map((template) => {
+              const on = emoji === template.emoji;
+              return (
+                <button
+                  key={template.label}
+                  className={`template ${on ? 'is-on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => {
+                    haptic('tap');
+                    if (on) { setEmoji(null); return; }
+                    setEmoji(template.emoji);
+                    if (note.trim() === '') setNote(template.label);
+                  }}
+                >
+                  <span className="template-emoji">{template.emoji}</span>
+                  {template.label}
+                </button>
+              );
+            })}
           </div>
           <input
             className="note-input"
@@ -150,6 +174,20 @@ export function Pay({ mode }: Props) {
             aria-label={COPY.pay.noteePlaceholder}
             onChange={(event) => setNote(event.target.value.slice(0, 140))}
           />
+          {mode === 'pay' && (
+            <button
+              className={`gift-toggle ${gift ? 'is-on' : ''}`}
+              aria-pressed={gift}
+              onClick={() => { haptic('tap'); setGift((on) => !on); }}
+            >
+              <span className="gift-toggle-mark" aria-hidden="true">🎁</span>
+              <span className="gift-toggle-text">
+                <span>{COPY.gift.label}</span>
+                <span className="gift-toggle-hint">{COPY.gift.hint}</span>
+              </span>
+              <span className="switch" aria-hidden="true"><span className="switch-dot" /></span>
+            </button>
+          )}
         </div>
 
         <Keypad value={amount} onChange={setAmount} />

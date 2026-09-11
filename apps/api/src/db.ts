@@ -61,6 +61,49 @@ CREATE TABLE IF NOT EXISTS sim_txs (
   amount_micros TEXT, status TEXT NOT NULL, created_at INTEGER NOT NULL, confirm_at INTEGER NOT NULL);
 `;
 
+/**
+ * Applied in order, tracked by `PRAGMA user_version`. Never edit one that has
+ * shipped — append instead, because somebody's database has already run it.
+ */
+const MIGRATIONS: string[] = [
+  // 1. Conversations gain members, so a group is just a thread with more of
+  //    them and every existing feature — chat, payments, requests, reactions —
+  //    works inside one for free. Unread moves onto the membership row.
+  `
+  CREATE TABLE IF NOT EXISTS thread_members (
+    thread_id TEXT NOT NULL REFERENCES threads(id), user_id TEXT NOT NULL,
+    unread INTEGER NOT NULL DEFAULT 0, joined_at INTEGER NOT NULL,
+    PRIMARY KEY (thread_id, user_id));
+  CREATE INDEX IF NOT EXISTS idx_thread_members_user ON thread_members(user_id);
+  ALTER TABLE threads ADD COLUMN kind TEXT NOT NULL DEFAULT 'direct';
+  ALTER TABLE threads ADD COLUMN title TEXT;
+  ALTER TABLE threads ADD COLUMN emoji TEXT;
+  INSERT OR IGNORE INTO thread_members (thread_id, user_id, unread, joined_at)
+    SELECT id, user_a, unread_a, updated_at FROM threads;
+  INSERT OR IGNORE INTO thread_members (thread_id, user_id, unread, joined_at)
+    SELECT id, user_b, unread_b, updated_at FROM threads;
+  `,
+  // 2. Money sent to someone who has no account yet waits in an escrow account
+  //    only the link-holder and the sender can open.
+  `
+  CREATE TABLE IF NOT EXISTS claims (
+    id TEXT PRIMARY KEY, from_user TEXT NOT NULL REFERENCES users(id),
+    escrow_address TEXT NOT NULL, amount_micros TEXT NOT NULL,
+    note TEXT, emoji TEXT, status TEXT NOT NULL DEFAULT 'funding',
+    claimed_by TEXT, event_id TEXT, created_at INTEGER NOT NULL, settled_at INTEGER);
+  CREATE INDEX IF NOT EXISTS idx_claims_from ON claims(from_user, status);
+  `,
+  // 3. A payment can hide its amount until the recipient opens it.
+  `
+  ALTER TABLE events ADD COLUMN gift INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE events ADD COLUMN revealed_at INTEGER;
+  `,
+  // 4. The salt the sender's device used to derive a link's holding-account
+  //    key. Useless without their own key, and it lets them take a link back
+  //    long after they closed the app that made it.
+  `ALTER TABLE claims ADD COLUMN derivation_ref TEXT;`,
+];
+
 export interface UserRow {
   id: string; handle: string; display_name: string; pubkey: string | null; created_at: number;
 }
@@ -71,12 +114,20 @@ export interface CredentialRow {
 export interface ThreadRow {
   id: string; user_a: string; user_b: string; last_event_id: string | null;
   updated_at: number; unread_a: number; unread_b: number;
+  kind: 'direct' | 'group'; title: string | null; emoji: string | null;
+}
+export interface ClaimRow {
+  id: string; from_user: string; escrow_address: string; amount_micros: string;
+  note: string | null; emoji: string | null; status: string; claimed_by: string | null;
+  event_id: string | null; created_at: number; settled_at: number | null;
+  derivation_ref: string | null;
 }
 export interface EventRow {
   id: string; thread_id: string; kind: string; from_user: string; to_user: string;
   amount_micros: string | null; note: string | null; emoji: string | null; body: string | null;
   status: string | null; chain_signature: string | null; split_id: string | null;
   request_event_id: string | null; created_at: number; confirmed_at: number | null;
+  gift: number; revealed_at: number | null;
 }
 export interface ReactionRow {
   event_id: string; user_id: string; emoji: string; created_at: number;
@@ -107,6 +158,24 @@ export class Store {
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  private migrate(): void {
+    const { user_version: version } = this.db.prepare('PRAGMA user_version').get() as
+      { user_version: number };
+    for (let i = version; i < MIGRATIONS.length; i++) {
+      this.db.exec('BEGIN');
+      try {
+        this.db.exec(MIGRATIONS[i]!);
+        // PRAGMA does not take a bound parameter, and i is a loop index.
+        this.db.exec(`PRAGMA user_version = ${i + 1}`);
+        this.db.exec('COMMIT');
+      } catch (error) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`migration ${i + 1} failed: ${(error as Error).message}`);
+      }
+    }
   }
 
   close(): void {
@@ -122,8 +191,24 @@ export class Store {
     return stmt;
   }
 
+  private depth = 0;
+
+  /**
+   * Reentrant: SQLite has no nested BEGIN, so an inner call joins the
+   * transaction already in flight and only the outermost one commits.
+   */
   transaction<T>(fn: () => T): T {
+    if (this.depth > 0) {
+      this.depth++;
+      try {
+        return fn();
+      } finally {
+        this.depth--;
+      }
+    }
+
     this.db.exec('BEGIN');
+    this.depth = 1;
     try {
       const result = fn();
       this.db.exec('COMMIT');
@@ -131,6 +216,8 @@ export class Store {
     } catch (error) {
       this.db.exec('ROLLBACK');
       throw error;
+    } finally {
+      this.depth = 0;
     }
   }
 
@@ -254,17 +341,46 @@ export class Store {
 
   getOrCreateThread(userOne: string, userTwo: string): ThreadRow {
     const [a, b] = userOne < userTwo ? [userOne, userTwo] : [userTwo, userOne];
-    const existing = this.q('SELECT * FROM threads WHERE user_a = ? AND user_b = ?').get(a, b) as
-      | ThreadRow | undefined;
+    const existing = this.q("SELECT * FROM threads WHERE user_a = ? AND user_b = ? AND kind = 'direct'")
+      .get(a, b) as ThreadRow | undefined;
     if (existing) return existing;
+
     const row: ThreadRow = {
       id: newId('thr'), user_a: a, user_b: b, last_event_id: null,
       updated_at: Date.now(), unread_a: 0, unread_b: 0,
+      kind: 'direct', title: null, emoji: null,
     };
-    this.q(
-      `INSERT INTO threads (id, user_a, user_b, last_event_id, updated_at, unread_a, unread_b)
-       VALUES (?, ?, ?, ?, ?, 0, 0)`,
-    ).run(row.id, row.user_a, row.user_b, null, row.updated_at);
+    this.transaction(() => {
+      this.q(
+        `INSERT INTO threads (id, user_a, user_b, last_event_id, updated_at, unread_a, unread_b, kind)
+         VALUES (?, ?, ?, ?, ?, 0, 0, 'direct')`,
+      ).run(row.id, row.user_a, row.user_b, null, row.updated_at);
+      this.addThreadMember(row.id, a);
+      this.addThreadMember(row.id, b);
+    });
+    return row;
+  }
+
+  /**
+   * A group is a thread with more than two members. `user_a`/`user_b` carry the
+   * thread's own id so the direct-pair uniqueness constraint can never collide
+   * between groups; membership always comes from `thread_members`.
+   */
+  createGroupThread(creatorId: string, title: string, emoji: string | null, memberIds: string[]): ThreadRow {
+    const row: ThreadRow = {
+      id: newId('thr'), user_a: '', user_b: '', last_event_id: null,
+      updated_at: Date.now(), unread_a: 0, unread_b: 0,
+      kind: 'group', title, emoji,
+    };
+    row.user_a = row.id;
+    row.user_b = row.id;
+    this.transaction(() => {
+      this.q(
+        `INSERT INTO threads (id, user_a, user_b, last_event_id, updated_at, unread_a, unread_b, kind, title, emoji)
+         VALUES (?, ?, ?, NULL, ?, 0, 0, 'group', ?, ?)`,
+      ).run(row.id, row.id, row.id, row.updated_at, title, emoji);
+      for (const userId of new Set([creatorId, ...memberIds])) this.addThreadMember(row.id, userId);
+    });
     return row;
   }
 
@@ -272,29 +388,56 @@ export class Store {
     return (this.q('SELECT * FROM threads WHERE id = ?').get(id) as ThreadRow | undefined) ?? null;
   }
 
-  listThreads(userId: string): ThreadRow[] {
-    return this.q(
-      `SELECT * FROM threads WHERE (user_a = ? OR user_b = ?) AND last_event_id IS NOT NULL
-       ORDER BY updated_at DESC LIMIT 100`,
-    ).all(userId, userId) as unknown as ThreadRow[];
+  renameThread(id: string, title: string, emoji: string | null): void {
+    this.q('UPDATE threads SET title = ?, emoji = ? WHERE id = ?').run(title, emoji, id);
   }
 
-  /** Bump a thread to the top and raise the recipient's unread count. */
-  touchThread(threadId: string, eventId: string, recipientId: string, bumpUnread = true): void {
-    const thread = this.getThread(threadId);
-    if (!thread) return;
-    const column = thread.user_a === recipientId ? 'unread_a' : 'unread_b';
-    const increment = bumpUnread ? 1 : 0;
+  // ---- membership ----------------------------------------------------------
+
+  addThreadMember(threadId: string, userId: string): void {
     this.q(
-      `UPDATE threads SET last_event_id = ?, updated_at = ?, ${column} = ${column} + ? WHERE id = ?`,
-    ).run(eventId, Date.now(), increment, threadId);
+      `INSERT INTO thread_members (thread_id, user_id, unread, joined_at) VALUES (?, ?, 0, ?)
+       ON CONFLICT(thread_id, user_id) DO NOTHING`,
+    ).run(threadId, userId, Date.now());
+  }
+
+  threadMemberIds(threadId: string): string[] {
+    const rows = this.q('SELECT user_id FROM thread_members WHERE thread_id = ? ORDER BY joined_at')
+      .all(threadId) as unknown as Array<{ user_id: string }>;
+    return rows.map((row) => row.user_id);
+  }
+
+  isThreadMember(threadId: string, userId: string): boolean {
+    return this.q('SELECT 1 FROM thread_members WHERE thread_id = ? AND user_id = ?')
+      .get(threadId, userId) !== undefined;
+  }
+
+  unreadFor(threadId: string, userId: string): number {
+    const row = this.q('SELECT unread FROM thread_members WHERE thread_id = ? AND user_id = ?')
+      .get(threadId, userId) as { unread: number } | undefined;
+    return row?.unread ?? 0;
+  }
+
+  listThreads(userId: string): ThreadRow[] {
+    return this.q(
+      `SELECT threads.* FROM threads
+       JOIN thread_members ON thread_members.thread_id = threads.id
+       WHERE thread_members.user_id = ? AND threads.last_event_id IS NOT NULL
+       ORDER BY threads.updated_at DESC LIMIT 100`,
+    ).all(userId) as unknown as ThreadRow[];
+  }
+
+  /** Bumps the thread to the top and raises unread for everyone but the actor. */
+  touchThread(threadId: string, eventId: string, actorId: string): void {
+    this.q('UPDATE threads SET last_event_id = ?, updated_at = ? WHERE id = ?')
+      .run(eventId, Date.now(), threadId);
+    this.q('UPDATE thread_members SET unread = unread + 1 WHERE thread_id = ? AND user_id != ?')
+      .run(threadId, actorId);
   }
 
   markThreadRead(threadId: string, userId: string): void {
-    const thread = this.getThread(threadId);
-    if (!thread) return;
-    const column = thread.user_a === userId ? 'unread_a' : 'unread_b';
-    this.q(`UPDATE threads SET ${column} = 0 WHERE id = ?`).run(threadId);
+    this.q('UPDATE thread_members SET unread = 0 WHERE thread_id = ? AND user_id = ?')
+      .run(threadId, userId);
   }
 
   // ---- events --------------------------------------------------------------
@@ -303,7 +446,7 @@ export class Store {
     threadId: string; kind: string; from: string; to: string;
     amountMicros?: bigint | null; note?: string | null; emoji?: string | null; body?: string | null;
     status?: string | null; splitId?: string | null; requestEventId?: string | null;
-    createdAt?: number;
+    createdAt?: number; gift?: boolean;
   }): EventRow {
     const row: EventRow = {
       id: newId('evt'),
@@ -322,15 +465,17 @@ export class Store {
       request_event_id: input.requestEventId ?? null,
       created_at: input.createdAt ?? Date.now(),
       confirmed_at: null,
+      gift: input.gift ? 1 : 0,
+      revealed_at: null,
     };
     this.q(
       `INSERT INTO events (id, thread_id, kind, from_user, to_user, amount_micros, note, emoji, body,
-        status, chain_signature, split_id, request_event_id, created_at, confirmed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, chain_signature, split_id, request_event_id, created_at, confirmed_at, gift)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.id, row.thread_id, row.kind, row.from_user, row.to_user, row.amount_micros, row.note,
       row.emoji, row.body, row.status, row.chain_signature, row.split_id, row.request_event_id,
-      row.created_at, row.confirmed_at,
+      row.created_at, row.confirmed_at, row.gift,
     );
     return row;
   }
@@ -388,6 +533,68 @@ export class Store {
        AND status IN ('pending', 'confirmed') AND created_at >= ?`,
     ).all(userId, since) as Array<{ amount_micros: string | null }>;
     return rows.reduce((sum, row) => sum + BigInt(row.amount_micros ?? '0'), 0n);
+  }
+
+  /** Opening a gift is one-way, and only the recipient can do it. */
+  revealEvent(id: string): void {
+    this.q('UPDATE events SET revealed_at = ? WHERE id = ? AND revealed_at IS NULL')
+      .run(Date.now(), id);
+  }
+
+  /** Every expense and settled payment in a group, for working out balances. */
+  groupLedger(threadId: string): EventRow[] {
+    return this.q(
+      `SELECT * FROM events WHERE thread_id = ?
+         AND (kind = 'expense' OR (kind = 'payment' AND status != 'failed'))
+       ORDER BY created_at ASC`,
+    ).all(threadId) as unknown as EventRow[];
+  }
+
+  // ---- claims --------------------------------------------------------------
+
+  createClaim(input: {
+    fromUser: string; escrowAddress: string; amountMicros: bigint;
+    note: string | null; emoji: string | null; derivationRef: string | null;
+  }): ClaimRow {
+    const row: ClaimRow = {
+      id: newId('clm'), from_user: input.fromUser, escrow_address: input.escrowAddress,
+      amount_micros: input.amountMicros.toString(), note: input.note, emoji: input.emoji,
+      status: 'funding', claimed_by: null, event_id: null, created_at: Date.now(), settled_at: null,
+      derivation_ref: input.derivationRef,
+    };
+    this.q(
+      `INSERT INTO claims (id, from_user, escrow_address, amount_micros, note, emoji, status,
+        claimed_by, event_id, created_at, settled_at, derivation_ref)
+       VALUES (?, ?, ?, ?, ?, ?, 'funding', NULL, NULL, ?, NULL, ?)`,
+    ).run(row.id, row.from_user, row.escrow_address, row.amount_micros, row.note, row.emoji,
+      row.created_at, row.derivation_ref);
+    return row;
+  }
+
+  getClaim(id: string): ClaimRow | null {
+    return (this.q('SELECT * FROM claims WHERE id = ?').get(id) as ClaimRow | undefined) ?? null;
+  }
+
+  setClaimStatus(id: string, status: string, extra: { claimedBy?: string; eventId?: string } = {}): void {
+    this.q(
+      `UPDATE claims SET status = ?, claimed_by = COALESCE(?, claimed_by),
+        event_id = COALESCE(?, event_id),
+        settled_at = CASE WHEN ? IN ('claimed', 'reclaimed') THEN ? ELSE settled_at END
+       WHERE id = ?`,
+    ).run(status, extra.claimedBy ?? null, extra.eventId ?? null, status, Date.now(), id);
+  }
+
+  /** Only the first caller wins, so a link cannot be claimed twice. */
+  lockClaim(id: string): boolean {
+    const result = this.q("UPDATE claims SET status = 'settling' WHERE id = ? AND status = 'open'")
+      .run(id);
+    return Number(result.changes) === 1;
+  }
+
+  openClaimsFrom(userId: string): ClaimRow[] {
+    return this.q(
+      "SELECT * FROM claims WHERE from_user = ? AND status IN ('funding', 'open') ORDER BY created_at DESC",
+    ).all(userId) as unknown as ClaimRow[];
   }
 
   // ---- reactions -----------------------------------------------------------
@@ -530,8 +737,9 @@ export class Store {
   /** Used by the seed script to start from a clean slate. */
   wipe(): void {
     for (const table of [
-      'reactions', 'split_participants', 'splits', 'prepared_payments', 'events', 'threads',
-      'sessions', 'challenges', 'vaults', 'credentials', 'sim_txs', 'sim_accounts', 'users',
+      'reactions', 'split_participants', 'splits', 'prepared_payments', 'claims', 'events',
+      'thread_members', 'threads', 'sessions', 'challenges', 'vaults', 'credentials',
+      'sim_txs', 'sim_accounts', 'users',
     ]) {
       this.db.exec(`DELETE FROM ${table}`);
     }

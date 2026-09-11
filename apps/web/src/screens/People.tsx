@@ -4,12 +4,14 @@ import { COPY, type PublicUser } from '@solder/shared';
 import { Avatar } from '../components/Avatar.js';
 import { Screen } from '../components/Screen.js';
 import { api } from '../lib/api.js';
+import { peopleFrom } from '../lib/people.js';
 import { useApp } from '../lib/store.js';
 
 export function People() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const intent = params.get('intent') === 'request' ? 'request' : 'pay';
+  const threadId = params.get('thread');
   const threads = useApp((state) => state.threads);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PublicUser[] | null>(null);
@@ -28,7 +30,7 @@ export function People() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const recents = threads.map((thread) => thread.peer);
+  const recents = peopleFrom(threads);
   const list = results ?? recents;
 
   return (
@@ -49,6 +51,23 @@ export function People() {
         />
       </div>
 
+      {/* Once they have typed a name, the person they meant comes first. */}
+      {intent === 'pay' && results === null && (
+        <button className="person-row link-row" onClick={() => navigate('/link')}>
+          <span className="avatar link-avatar" aria-hidden="true">🔗</span>
+          <span className="person-main">
+            <span className="person-name">{COPY.link.sendByLink}</span>
+            <span className="person-handle">{COPY.link.linkHint}</span>
+          </span>
+          <span className="person-go" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </button>
+      )}
+
       {results === null && recents.length > 0 && (
         <p className="list-label">{COPY.people.recents}</p>
       )}
@@ -61,7 +80,8 @@ export function People() {
             <li key={person.handle}>
               <button
                 className="person-row"
-                onClick={() => navigate(`/${intent}/${person.handle}`)}
+                onClick={() => navigate(
+                  `/${intent}/${person.handle}${threadId ? `?thread=${threadId}` : ''}`)}
               >
                 <Avatar handle={person.handle} displayName={person.displayName} size={44} />
                 <span className="person-main">

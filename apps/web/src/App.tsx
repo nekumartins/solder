@@ -1,10 +1,14 @@
 import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar.js';
 import { TabBar } from './components/TabBar.js';
 import { OfflineBar, Toast } from './components/Toast.js';
 import { connectStream, disconnectStream } from './lib/realtime.js';
 import { store, useApp } from './lib/store.js';
 import { Claim } from './screens/Claim.js';
+import { ClaimLink } from './screens/ClaimLink.js';
+import { NewGroup } from './screens/NewGroup.js';
+import { SendLink } from './screens/SendLink.js';
 import { Home } from './screens/Home.js';
 import { Me } from './screens/Me.js';
 import { Pay } from './screens/Pay.js';
@@ -43,7 +47,10 @@ export function App() {
   // Signed-out people can still open a shared link; everything else waits.
   useEffect(() => {
     if (phase !== 'signed-out') return;
-    const open = ['/welcome', '/claim'].includes(location.pathname) || isProfileLink(location.pathname);
+    // A money link and a profile link both have to work before signing in —
+    // that is the whole point of them.
+    const open = ['/welcome', '/claim'].includes(location.pathname) ||
+      location.pathname.startsWith('/c/') || isProfileLink(location.pathname);
     if (!open) navigate('/welcome', { replace: true });
   }, [phase, location.pathname, navigate]);
 
@@ -51,9 +58,15 @@ export function App() {
     return <div className="boot"><span className="spinner spinner-lg" aria-label="Loading" /></div>;
   }
 
+  // The sidebar only exists on wide screens, and only once you are signed in.
+  const wide = phase === 'ready' && !['/welcome', '/claim'].includes(location.pathname) &&
+    !location.pathname.startsWith('/c/');
+
   return (
     <>
       <OfflineBar />
+      {wide && <Sidebar />}
+      <main className="pane">
       <Routes>
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/claim" element={<Claim />} />
@@ -63,12 +76,16 @@ export function App() {
         <Route path="/request/:handle" element={<Pay mode="request" />} />
         <Route path="/people" element={<People />} />
         <Route path="/split" element={<Split />} />
+        <Route path="/groups/new" element={<NewGroup />} />
+        <Route path="/link" element={<SendLink />} />
+        <Route path="/c/:id" element={<ClaimLink />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/me" element={<Me />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/:handle" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </main>
       <TabBar />
       <Toast />
     </>

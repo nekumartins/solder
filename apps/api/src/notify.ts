@@ -3,11 +3,17 @@ import type { EventRow } from './db.js';
 import { threadEvent } from './serialize.js';
 
 /**
- * Both sides of a payment see the same event, but "mine" differs, so each
- * side gets its own serialization.
+ * Everyone in the conversation sees the same event, but "mine" — and whether a
+ * gift's amount is visible — differs per person, so each gets its own
+ * serialization.
  */
 export function publishEvent(ctx: AppContext, row: EventRow, type: 'event.new' | 'event.updated'): void {
-  for (const userId of new Set([row.from_user, row.to_user])) {
+  const audience = new Set([
+    ...ctx.store.threadMemberIds(row.thread_id),
+    row.from_user,
+    row.to_user,
+  ]);
+  for (const userId of audience) {
     ctx.realtime.publish(userId, {
       type,
       threadId: row.thread_id,

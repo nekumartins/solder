@@ -34,6 +34,16 @@ export const wallet = {
     return cachedAccountKey;
   },
 
+  /**
+   * The raw key, for deriving a link's holding account. Never send this
+   * anywhere — it is the money.
+   */
+  seedForDerivation(): Uint8Array {
+    if (!seed || !wallet.isUnlocked()) throw new Error('locked');
+    unlockedAt = Date.now();
+    return seed;
+  },
+
   sign(messageB64: string): string {
     if (!seed || !wallet.isUnlocked()) throw new Error('locked');
     unlockedAt = Date.now();

@@ -19,7 +19,11 @@ addresses, no seed phrase, no gas to think about.
 | **Gas, ETH, "approve this transaction"** | Payments are **EIP-3009 authorisations**: you sign one off-chain and a relayer submits it and pays the gas. You never hold ETH and never see a fee. Confirming a payment is a Face ID prompt, not a signing dialog. |
 
 Every payment is a message in a conversation. Notes, emoji, reactions, money requests you
-settle with one tap, and bills split across a table — all in the same thread.
+settle with one tap, surprises that stay hidden until they are opened, and groups that keep a
+running ledger of who owes whom.
+
+And you can pay someone who has never heard of any of this: they get a link, tap it, and the
+money is already theirs.
 
 ## Try it in 60 seconds
 
@@ -42,6 +46,31 @@ await fetch('/api/dev/login', {
 **On your phone:** run `npm run dev -- --host`, open the printed LAN address, and add it to
 your home screen. Passkeys need a secure context, so either use `localhost` or put it behind
 HTTPS.
+
+## Paying someone who isn't here yet
+
+The link is the product's front door, so it has to work before anyone has an account — and
+without anybody holding the money on their behalf.
+
+```
+  sender's device              server                        chain
+   │  derives a holding key      │                            │
+   │  from its own key ──────────▶ records the claim          │
+   │  signs a transfer to it ────▶ relays it ─────────────────▶ money sits in the
+   │                             │                            │ holding account
+   │  link = /c/<id>#<key>       │
+   │        └─ the fragment never leaves the browser
+   ▼
+  "I sent you $20" ──▶ recipient taps ──▶ sees who and how much, signed out
+                                     └──▶ creates an account with a passkey
+                                     └──▶ signs AS the holding account, with the
+                                          key from the link, to move it to theirs
+```
+
+Whoever holds the link can take the money; so can the sender, who can re-derive the same key
+from their own. Nobody else can — including this server, which only ever sees an address.
+The sender's copy is derived with HKDF from their own key plus a stored salt, so taking an
+unclaimed link back works on a device that never saw the link.
 
 ## How a payment actually works
 
@@ -127,14 +156,19 @@ Two things to get right before real money:
 
 ```
 packages/shared/     money math (bigint micro-USDC), handle rules, DTOs, the copy deck
-apps/api/            Fastify 5 + node:sqlite
-  src/chain/         the two ledger adapters
-  src/routes/        auth, vault, users, threads, payments, requests, splits, stream
+apps/api/            Fastify 5 + node:sqlite, with in-file migrations
+  src/chain/         the two ledger adapters and the EIP-712 encoding
+  src/routes/        auth, vault, users, threads, payments, requests, groups, claims, stream
 apps/web/            React 19 + Vite, plain CSS, vite-plugin-pwa
-  src/lib/           api, passkey, vault crypto, wallet session, store, SSE
-  src/screens/       welcome, claim, home, thread, pay, people, split, scan, profile, settings
+  src/lib/           api, passkey, vault crypto, wallet session, claim links, store, SSE
+  src/screens/       welcome, claim, home, thread, pay, link, people, group, scan, settings
 scripts/e2e.mjs      drives the real app in Chromium with a virtual passkey authenticator
+scripts/mvp-test.mjs the original brief's success test, run end to end
 ```
+
+A **group** is a thread with more than two members, so chat, payments, requests and reactions
+all work inside one with no new machinery. What groups add is a ledger: expenses, each
+person's share to the cent, and the shortest set of payments that squares everyone up.
 
 The browser never imports `viem`. It signs bytes with `@noble/curves/secp256k1`, so the PWA
 ships without Buffer polyfills — the production bundle contains zero Ethereum client library.
@@ -142,8 +176,9 @@ ships without Buffer polyfills — the production bundle contains zero Ethereum 
 ## Tests
 
 ```bash
-npm test     # 56 tests: money math, EIP-712, the jargon ban, auth, vault, payments, social
-npm run e2e  # the real UI in Chromium at iPhone size, passkey included
+npm test          # 76 tests across the workspaces
+npm run e2e       # 21 steps through the real UI in Chromium, passkey included
+npm run mvp-test  # the original brief's own success test (see below)
 ```
 
 The signing tests matter most, because those bytes are what a real contract would accept:
@@ -156,6 +191,20 @@ The payment tests prove the rest: a tampered authorisation is refused even when 
 signed, a signature from the wrong key is refused, an honest one goes through, replays and
 expired authorisations are rejected, and a failed payment leaves the balance untouched. One
 test asserts the server's vault table has no column that could hold a key.
+
+For links, the tests prove a stranger who guesses a claim id but has no link secret is
+refused, a link cannot be picked up twice, and the sender can take back what nobody claimed.
+For surprises, that the amount is genuinely absent from the recipient's payload until they
+open it — not merely hidden in the interface.
+
+`npm run mvp-test` runs the seven steps the brief set as its success condition, in two
+separate browser profiles with real passkeys:
+
+> They receive a link → click it → authenticate → **see money** → send money to someone else →
+> the other person receives it → neither needed to understand any of it.
+
+The last step is checked by reading every word rendered across six screens and failing on any
+of thirteen banned terms.
 
 There is also a test that walks every user-facing string and fails if a banned word
 ("seed phrase", "gas", "blockchain", …) appears — the no-jargon rule is enforced, not just

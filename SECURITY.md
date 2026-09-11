@@ -101,6 +101,32 @@ anything: an unsubmitted authorisation simply expires.
 - A transfer nobody signs is reaped along with its event, so a cancelled biometric prompt
   leaves no trace.
 
+## Money sent to someone who has no account
+
+A link is a bearer instrument, and it is worth being blunt about what that means.
+
+The money goes to a holding account whose key is derived on the sender's device and carried
+in the link's `#fragment`. Fragments are never sent to a server, so this server only ever
+learns an address. Two people can move that money: whoever holds the link, and the sender,
+whose device can re-derive the same key from their own key plus a stored salt (useless on its
+own). The server can do neither — it can only pay the gas to publish a transfer one of them
+has already signed.
+
+The consequences follow from that, and they are the same as for cash:
+
+- **Anyone who sees the link can take the money.** A link forwarded to the wrong group chat,
+  or read off a screen, is gone. It is not addressed to a person, because at the moment of
+  sending there is no person to address it to.
+- **Links do not expire.** Money left in a holding account stays there until someone claims
+  it or the sender takes it back. There is no sweep, and a forgotten link is forgotten money.
+  A production version should expire them and reclaim automatically.
+- **Picking up is first-come.** `lockClaim` is a conditional `UPDATE … WHERE status = 'open'`,
+  so two simultaneous taps cannot both succeed, but the winner is whoever got there first.
+
+The alternative — holding the funds ourselves until someone claims them — would make this
+custodial, which is the thing the whole design is trying to avoid. This is the trade, made
+deliberately.
+
 ## Sessions
 
 A session token is 32 random bytes in an `HttpOnly`, `SameSite=Lax` cookie. Only its SHA-256
@@ -115,10 +141,18 @@ whenever `NODE_ENV=production`, regardless of what `DEV_LOGIN` says (`config.ts`
 is not registered when it is off, and the server logs a warning at boot when it is on. A test
 asserts it returns 404 when disabled.
 
+## Surprises
+
+A gift's amount is withheld from the recipient by the server, not by the interface: until
+they open it, `amountMicros` is `null` in every response and every live update they receive.
+A test asserts the value does not appear anywhere in the payload. The sender always sees what
+they sent, and the money moves on-chain immediately either way — only the telling is delayed,
+and anyone reading the chain can see the amount.
+
 ## What is stored in plaintext
 
 Handles, display names, account addresses, payment amounts, payment notes, chat messages,
-reactions and split membership. Solder is not a private messenger. Notes are deliberately
+reactions, group membership and group ledgers. Solder is not a private messenger. Notes are deliberately
 kept off-chain so they are not published to the world, but the server can read them.
 
 On-chain, every payment is a public `Transfer` between two addresses. Handles are not on

@@ -27,7 +27,7 @@ export async function requestRoutes(app: FastifyInstance, ctx: AppContext): Prom
       threadId: thread.id, kind: 'request', from: user.id, to: peer.id,
       amountMicros: amount, note, emoji: noteEmoji, status: 'open',
     });
-    store.touchThread(thread.id, event.id, peer.id, true);
+    store.touchThread(thread.id, event.id, user.id);
     publishEvent(ctx, event, 'event.new');
 
     return { event: threadEvent(store, event, user.id) };
@@ -86,7 +86,7 @@ export async function requestRoutes(app: FastifyInstance, ctx: AppContext): Prom
           threadId: thread.id, kind: 'request', from: user.id, to: peer.id,
           amountMicros: share, note, status: 'open', splitId: created.id,
         });
-        store.touchThread(thread.id, event.id, peer.id, true);
+        store.touchThread(thread.id, event.id, user.id);
         store.addSplitParticipant(created.id, peer.id, share, event.id);
       });
       return created;

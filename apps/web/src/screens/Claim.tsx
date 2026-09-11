@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { COPY, avatarFor, validateHandle } from '@solder/shared';
 import { Button } from '../components/Button.js';
 import { PinSheet } from '../components/PinSheet.js';
@@ -14,6 +14,9 @@ type Availability = { state: 'idle' | 'checking' | 'free' | 'taken'; reason?: st
 
 export function Claim() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Onboarding can be interrupted by a link; come back to it afterwards.
+  const next = params.get('next') ?? '/';
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [availability, setAvailability] = useState<Availability>({ state: 'idle' });
@@ -50,7 +53,7 @@ export function Claim() {
       await signUp(handle, displayName.trim(), pin.request);
       store.signedIn();
       await store.load();
-      navigate('/', { replace: true });
+      navigate(next, { replace: true });
     } catch (error) {
       store.toast(friendly(error), 'bad');
     } finally {

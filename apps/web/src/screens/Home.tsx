@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { COPY, formatUsd, type ThreadSummary } from '@solder/shared';
 import { Avatar } from '../components/Avatar.js';
+import { ThreadAvatar, threadHref, threadTitle } from '../components/ThreadIdentity.js';
+import { PendingLinks } from '../components/PendingLinks.js';
 import { api } from '../lib/api.js';
 import { store, useApp } from '../lib/store.js';
 import { dayLabel } from '../components/EventBubble.js';
@@ -68,7 +70,7 @@ export function Home() {
             </span>
             {COPY.home.request}
           </button>
-          <button className="action" onClick={() => navigate('/split')}>
+          <button className="action" onClick={() => navigate('/groups/new')}>
             <span className="action-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="22" height="22">
                 <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.9" />
@@ -77,9 +79,11 @@ export function Home() {
                 <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" opacity="0.35" />
               </svg>
             </span>
-            {COPY.home.split}
+            {COPY.home.groups}
           </button>
         </nav>
+
+        <PendingLinks />
 
         {threads.length === 0 ? (
           <div className="empty">
@@ -103,11 +107,11 @@ function ThreadRow({ thread }: { thread: ThreadSummary }) {
 
   return (
     <li>
-      <Link className="thread-row" to={`/t/${thread.peer.handle}`}>
-        <Avatar handle={thread.peer.handle} displayName={thread.peer.displayName} size={46} />
+      <Link className="thread-row" to={threadHref(thread)}>
+        <ThreadAvatar thread={thread} size={46} />
         <span className="thread-main">
           <span className="thread-top">
-            <span className="thread-name">{thread.peer.displayName}</span>
+            <span className="thread-name">{threadTitle(thread)}</span>
             <span className="thread-when">{event ? dayLabel(event.createdAt) : ''}</span>
           </span>
           <span className="thread-bottom">
@@ -128,12 +132,19 @@ function ThreadRow({ thread }: { thread: ThreadSummary }) {
 function preview(thread: ThreadSummary): string {
   const event = thread.lastEvent;
   if (!event) return 'Say hello';
-  if (event.kind === 'note') return event.body ?? '';
+  // In a group it matters who is speaking.
+  const who = thread.kind === 'group' && !event.mine ? `${event.from}: ` : '';
+  if (event.kind === 'system') return event.body ?? '';
+  if (event.kind === 'expense') {
+    return `${who}${formatUsd(BigInt(event.amountMicros ?? '0'))} · ${event.note ?? 'expense'}`;
+  }
+  if (event.kind === 'note') return `${who}${event.body ?? ''}`;
   if (event.kind === 'request') {
     const amount = formatUsd(BigInt(event.amountMicros ?? '0'));
     if (event.status === 'paid') return `${amount} · paid`;
     return event.mine ? `You asked for ${amount}` : `Asks for ${amount}`;
   }
+  if (event.gift && !event.revealed && !event.mine) return `🎁 ${COPY.gift.waiting}`;
   const note = event.note ? ` · ${event.note}` : '';
   const emoji = event.emoji ? `${event.emoji} ` : '';
   if (event.status === 'pending') return `${emoji}Sending…`;

@@ -2,17 +2,22 @@ import { useRef, useState } from 'react';
 import { COPY, formatUsd, type ThreadEvent } from '@solder/shared';
 import { haptic } from '../lib/haptics.js';
 
-const QUICK_REACTIONS = ['❤️', '🔥', '😂', '🙏', '🎉'];
+const QUICK_REACTIONS = ['❤️', '😂', '🔥', '😭', '🤝'];
 
 interface Props {
   event: ThreadEvent;
+  /** Groups need a name above each bubble; a one-to-one conversation does not. */
+  showSender?: boolean;
+  onReveal?: (event: ThreadEvent) => void;
   onPay?: (event: ThreadEvent) => void;
   onDecline?: (event: ThreadEvent) => void;
   onCancel?: (event: ThreadEvent) => void;
   onReact?: (event: ThreadEvent, emoji: string) => void;
 }
 
-export function EventBubble({ event, onPay, onDecline, onCancel, onReact }: Props) {
+export function EventBubble({
+  event, showSender, onReveal, onPay, onDecline, onCancel, onReact,
+}: Props) {
   const [picking, setPicking] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
@@ -30,6 +35,7 @@ export function EventBubble({ event, onPay, onDecline, onCancel, onReact }: Prop
 
   return (
     <div className={`row row-${side}`}>
+      {showSender && !event.mine && <span className="row-sender">{event.from}</span>}
       <div
         className={`bubble bubble-${event.kind} bubble-${side} ${event.status ? `is-${event.status}` : ''}`}
         onPointerDown={holdStart}
@@ -39,6 +45,8 @@ export function EventBubble({ event, onPay, onDecline, onCancel, onReact }: Prop
       >
         {event.kind === 'note' ? (
           <p className="bubble-text">{event.body}</p>
+        ) : event.gift && !event.revealed && !event.mine ? (
+          <GiftBody event={event} onReveal={onReveal} />
         ) : (
           <MoneyBody event={event} />
         )}
@@ -93,14 +101,30 @@ export function EventBubble({ event, onPay, onDecline, onCancel, onReact }: Prop
   );
 }
 
+/** A surprise: the app genuinely does not know the amount until it is opened. */
+function GiftBody({ event, onReveal }: { event: ThreadEvent; onReveal?: (e: ThreadEvent) => void }) {
+  return (
+    <div className="gift">
+      <span className="gift-mark" aria-hidden="true">🎁</span>
+      <p className="bubble-caption">@{event.from} {COPY.gift.waiting}</p>
+      {event.note ? <p className="bubble-note">{event.note}</p> : null}
+      <button className="chip chip-pay gift-open" onClick={() => onReveal?.(event)}>
+        {COPY.gift.reveal}
+      </button>
+    </div>
+  );
+}
+
 function MoneyBody({ event }: { event: ThreadEvent }) {
   const amount = formatUsd(BigInt(event.amountMicros ?? '0'));
   const isRequest = event.kind === 'request';
+  const isExpense = event.kind === 'expense';
 
   return (
     <>
       <div className="bubble-head">
         {event.emoji ? <span className="bubble-emoji">{event.emoji}</span> : null}
+        {event.gift && event.mine ? <span className="bubble-emoji">🎁</span> : null}
         <span className="bubble-amount num">{amount}</span>
       </div>
       <p className="bubble-caption">{caption(event)}</p>
@@ -112,7 +136,7 @@ function MoneyBody({ event }: { event: ThreadEvent }) {
         </p>
       )}
 
-      {!isRequest && <StatusLine event={event} />}
+      {!isRequest && !isExpense && <StatusLine event={event} />}
       {isRequest && event.status !== 'open' && (
         <p className="bubble-status">{requestStatusLabel(event.status)}</p>
       )}
@@ -139,9 +163,13 @@ function StatusLine({ event }: { event: ThreadEvent }) {
 }
 
 function caption(event: ThreadEvent): string {
+  if (event.kind === 'expense') {
+    return event.mine ? `You ${COPY.group.paid}` : `@${event.from} ${COPY.group.paid}`;
+  }
   if (event.kind === 'request') {
     return event.mine ? COPY.thread.youAsked : `@${event.from} ${COPY.thread.asksYou}`;
   }
+  if (event.gift && event.mine) return COPY.gift.youSent;
   return event.mine ? COPY.thread.youSent : COPY.thread.youReceived;
 }
 

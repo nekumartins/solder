@@ -1,27 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { COPY, type PublicUser, type ThreadEvent, type ThreadPage } from '@solder/shared';
-import { Avatar } from '../components/Avatar.js';
+import { COPY, type GroupSummary, type PublicUser, type ThreadEvent, type ThreadPage } from '@solder/shared';
 import { DayDivider, EventBubble } from '../components/EventBubble.js';
+import { GroupPanel } from '../components/GroupPanel.js';
 import { Screen } from '../components/Screen.js';
+import { ThreadAvatar } from '../components/ThreadIdentity.js';
 import { api } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
 import { store } from '../lib/store.js';
 import { friendly } from './Welcome.js';
 
 export function Thread() {
+  // A conversation is addressed by a handle, or by its id when it is a group.
   const { handle = '' } = useParams();
   const navigate = useNavigate();
-  const [peer, setPeer] = useState<PublicUser | null>(null);
+  const [page, setPage] = useState<ThreadPage | null>(null);
   const [events, setEvents] = useState<ThreadEvent[]>([]);
   const [draft, setDraft] = useState('');
   const bottom = useRef<HTMLDivElement>(null);
 
+  const peer: PublicUser | null = page?.peer ?? null;
+  const isGroup = page?.kind === 'group';
+
   const load = useCallback(async (): Promise<void> => {
     try {
-      const page = await api.get<ThreadPage>(`/api/threads/${handle}`);
-      setPeer(page.peer);
-      setEvents(page.events);
+      const fetched = await api.get<ThreadPage>(`/api/threads/${handle}`);
+      setPage(fetched);
+      setEvents(fetched.events);
       await api.post(`/api/threads/${handle}/read`);
       void store.refreshThreads();
     } catch (error) {
@@ -34,10 +39,13 @@ export function Thread() {
   // Live updates for this conversation only.
   useEffect(() => store.onStream((event) => {
     if (event.type !== 'event.new' && event.type !== 'event.updated') return;
-    if (event.event.from !== handle && event.event.to !== handle) return;
+    const mine = page ? event.threadId === page.threadId
+      : event.event.from === handle || event.event.to === handle;
+    if (!mine) return;
     setEvents((current) => store.mergeEvent(current, event.event));
+    if (event.type === 'event.new' && isGroup) void load();
     void api.post(`/api/threads/${handle}/read`);
-  }), [handle]);
+  }), [handle, page, isGroup, load]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: events.length > 12 ? 'auto' : 'smooth' });
@@ -72,21 +80,33 @@ export function Thread() {
     <Screen
       bare
       back="/"
-      lead={<Avatar handle={handle} displayName={peer?.displayName} size={38} />}
-      title={peer?.displayName ?? `@${handle}`}
-      subtitle={`@${handle}`}
-      action={
+      lead={<ThreadAvatar
+        thread={{ kind: page?.kind ?? 'direct', peer, title: page?.title ?? null, emoji: page?.emoji ?? null }}
+        size={38}
+      />}
+      title={isGroup ? page?.title ?? 'Group' : peer?.displayName ?? `@${handle}`}
+      subtitle={isGroup ? COPY.group.members(page?.members.length ?? 0) : `@${handle}`}
+      action={!isGroup && (
         <button className="chip chip-pay" onClick={() => navigate(`/pay/${handle}`)}>
           {COPY.thread.sendMoney}
         </button>
-      }
+      )}
     >
+      {isGroup && page?.group && (
+        <GroupPanel threadId={page.threadId} group={page.group as GroupSummary} onChange={load} />
+      )}
+
       <div className="scroll thread-scroll">
         {events.length === 0 && (
           <div className="empty empty-thread">
-            <Avatar handle={handle} displayName={peer?.displayName} size={64} />
-            <p className="empty-title">{peer?.displayName ?? `@${handle}`}</p>
-            <p className="empty-sub">Send the first message — or the first few dollars.</p>
+            <ThreadAvatar
+              thread={{ kind: page?.kind ?? 'direct', peer, title: page?.title ?? null, emoji: page?.emoji ?? null }}
+              size={64}
+            />
+            <p className="empty-title">{isGroup ? page?.title : peer?.displayName ?? `@${handle}`}</p>
+            <p className="empty-sub">
+              {isGroup ? COPY.group.emptySub : 'Send the first message — or the first few dollars.'}
+            </p>
           </div>
         )}
 
@@ -95,6 +115,8 @@ export function Thread() {
             {needsDivider(events, index) && <DayDivider at={event.createdAt} />}
             <EventBubble
               event={event}
+              showSender={isGroup}
+              onReveal={(target) => act(`/api/events/${target.id}/reveal`)}
               onPay={(target) => navigate(
                 `/pay/${handle}?amount=${target.amountMicros}&request=${target.id}`)}
               onDecline={(target) => act(`/api/requests/${target.id}/decline`)}
@@ -117,8 +139,8 @@ export function Thread() {
       <div className="composer">
         <button
           className="composer-money"
-          aria-label={COPY.thread.requestMoney}
-          onClick={() => navigate(`/request/${handle}`)}
+          aria-label={isGroup ? COPY.group.addExpense : COPY.thread.requestMoney}
+          onClick={() => navigate(isGroup ? `/people?intent=pay&thread=${handle}` : `/request/${handle}`)}
         >
           <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path d="M12 5v14m0 0 6-6m-6 6-6-6" fill="none" stroke="currentColor" strokeWidth="2"

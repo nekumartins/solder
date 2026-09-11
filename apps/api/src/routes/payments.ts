@@ -32,6 +32,8 @@ export async function paymentRoutes(app: FastifyInstance, ctx: AppContext): Prom
     const note = optionalStr(body['note'], 'note', 140);
     const noteEmoji = emoji(body['emoji']);
     const requestEventId = optionalStr(body['requestEventId'], 'requestEventId', 64);
+    const threadRef = optionalStr(body['threadId'], 'threadId', 64);
+    const isGift = body['gift'] === true;
 
     if (!user.pubkey) throw conflict('setup_incomplete', 'Finish setting up your account first');
 
@@ -64,7 +66,20 @@ export async function paymentRoutes(app: FastifyInstance, ctx: AppContext): Prom
       splitId = requestEvent.split_id;
     }
 
-    const thread = store.getOrCreateThread(user.id, recipient.id);
+    // Settling up inside a group puts the payment in the group's own ledger
+    // rather than starting a side conversation.
+    let thread = store.getOrCreateThread(user.id, recipient.id);
+    if (threadRef) {
+      const named = store.getThread(threadRef);
+      if (!named || !store.isThreadMember(named.id, user.id)) {
+        throw notFound('thread_not_found', 'That conversation is gone');
+      }
+      if (!store.isThreadMember(named.id, recipient.id)) {
+        throw badRequest('not_a_member', `@${recipient.handle} is not in that group`);
+      }
+      thread = named;
+    }
+
     const event = store.createEvent({
       threadId: thread.id,
       kind: 'payment',
@@ -76,6 +91,7 @@ export async function paymentRoutes(app: FastifyInstance, ctx: AppContext): Prom
       status: 'pending',
       splitId,
       requestEventId: linkedRequestId,
+      gift: isGift,
     });
 
     const prepared = await chain.prepareTransfer({
@@ -149,7 +165,7 @@ export async function paymentRoutes(app: FastifyInstance, ctx: AppContext): Prom
         signature: result.signature,
         confirmedAt: result.status === 'confirmed' ? Date.now() : null,
       });
-      store.touchThread(event.thread_id, event.id, event.to_user, true);
+      store.touchThread(event.thread_id, event.id, event.from_user);
 
       if (event.request_event_id) {
         store.setEventStatus(event.request_event_id, 'paid');

@@ -3,7 +3,7 @@
  * Money fields are decimal strings of micro-USDC — parse with BigInt().
  */
 
-export type EventKind = 'payment' | 'request' | 'note' | 'system';
+export type EventKind = 'payment' | 'request' | 'note' | 'system' | 'expense';
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed';
 export type RequestStatus = 'open' | 'paid' | 'declined' | 'cancelled';
 export type ChainKind = 'sim' | 'ethereum' | 'sepolia' | 'base' | 'base-sepolia';
@@ -45,6 +45,38 @@ export interface SplitProgress {
   participants: Array<{ handle: string; displayName: string; shareMicros: string; status: RequestStatus }>;
 }
 
+export interface GroupMemberBalance {
+  handle: string;
+  displayName: string;
+  /** What they have put in. */
+  paidMicros: string;
+  /** Positive when the group owes them, negative when they owe the group. */
+  netMicros: string;
+}
+
+export interface GroupSummary {
+  totalMicros: string;
+  perPersonMicros: string;
+  members: GroupMemberBalance[];
+  /** The shortest set of payments that squares everyone up. */
+  settlements: Array<{ from: string; to: string; micros: string }>;
+  /** What the signed-in person should do about it, if anything. */
+  youOwe: Array<{ handle: string; displayName: string; micros: string }>;
+  youAreOwed: Array<{ handle: string; displayName: string; micros: string }>;
+}
+
+export interface ClaimSummary {
+  id: string;
+  from: PublicUser;
+  amountMicros: string;
+  note: string | null;
+  emoji: string | null;
+  status: 'funding' | 'open' | 'settling' | 'claimed' | 'reclaimed';
+  createdAt: number;
+  /** Only returned to the sender, for rebuilding the holding account's key. */
+  derivationRef?: string | null;
+}
+
 export interface ThreadEvent {
   id: string;
   threadId: string;
@@ -66,20 +98,37 @@ export interface ThreadEvent {
   confirmedAt: number | null;
   reactions: Reaction[];
   split: SplitProgress | null;
+  /** A surprise: the amount is withheld from the recipient until they open it. */
+  gift: boolean;
+  revealed: boolean;
 }
+
+export type ThreadKind = 'direct' | 'group';
 
 export interface ThreadSummary {
   id: string;
-  peer: PublicUser;
+  kind: ThreadKind;
+  /** Set for a one-to-one conversation. */
+  peer: PublicUser | null;
+  /** Set for a group. */
+  title: string | null;
+  emoji: string | null;
+  members: PublicUser[];
   lastEvent: ThreadEvent | null;
   unread: number;
   updatedAt: number;
 }
 
 export interface ThreadPage {
-  peer: PublicUser;
+  threadId: string;
+  kind: ThreadKind;
+  peer: PublicUser | null;
+  title: string | null;
+  emoji: string | null;
+  members: PublicUser[];
   events: ThreadEvent[];
   hasMore: boolean;
+  group: GroupSummary | null;
 }
 
 export interface PreparedPayment {

@@ -91,17 +91,71 @@ export function formatAmountInput(digits: string): string {
   return `${whole}.${fracPart}`;
 }
 
+/** One cent, for splits that should not produce fractions of a penny. */
+export const CENT = 10_000n;
+
 /**
  * Split `total` into `ways` shares that sum to exactly `total`.
- * The remainder is handed out one micro at a time to the earliest shares.
+ *
+ * The remainder is handed out to the earliest shares, in units of `step` — so
+ * a bill split between four people lands on whole cents rather than asking
+ * someone for $164.625.
  */
-export function splitShares(total: bigint, ways: number): bigint[] {
+export function splitShares(total: bigint, ways: number, step = 1n): bigint[] {
   if (!Number.isInteger(ways) || ways < 1) throw new AmountError('Need at least one person');
   if (total < 0n) throw new AmountError("Amounts can't be negative");
+  if (step < 1n) throw new AmountError('Step must be at least one');
+
   const n = BigInt(ways);
-  const base = total / n;
-  const remainder = total % n;
-  return Array.from({ length: ways }, (_, i) => (BigInt(i) < remainder ? base + 1n : base));
+  const base = (total / (n * step)) * step;
+  let remainder = total - base * n;
+
+  return Array.from({ length: ways }, () => {
+    const extra = remainder >= step ? step : remainder;
+    remainder -= extra;
+    return base + extra;
+  });
+}
+
+export interface Balance {
+  /** Whatever identifies the person; passed straight through. */
+  id: string;
+  /** Positive when they are owed money, negative when they owe it. */
+  net: bigint;
+}
+
+export interface Settlement {
+  from: string;
+  to: string;
+  micros: bigint;
+}
+
+/**
+ * Turns a set of group balances into the shortest sensible list of payments.
+ *
+ * Everyone who owes pays whoever is owed, largest first, so a group of five
+ * settles in a handful of transfers rather than everyone paying everyone.
+ */
+export function settleUp(balances: Balance[]): Settlement[] {
+  const owed = balances.filter((b) => b.net > 0n).map((b) => ({ ...b }))
+    .sort((a, b) => (b.net > a.net ? 1 : b.net < a.net ? -1 : 0));
+  const owing = balances.filter((b) => b.net < 0n).map((b) => ({ id: b.id, net: -b.net }))
+    .sort((a, b) => (b.net > a.net ? 1 : b.net < a.net ? -1 : 0));
+
+  const settlements: Settlement[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < owing.length && j < owed.length) {
+    const debtor = owing[i]!;
+    const creditor = owed[j]!;
+    const micros = debtor.net < creditor.net ? debtor.net : creditor.net;
+    if (micros > 0n) settlements.push({ from: debtor.id, to: creditor.id, micros });
+    debtor.net -= micros;
+    creditor.net -= micros;
+    if (debtor.net === 0n) i++;
+    if (creditor.net === 0n) j++;
+  }
+  return settlements;
 }
 
 /** "1234567" -> "1,234,567" */

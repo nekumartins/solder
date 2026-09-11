@@ -128,12 +128,12 @@ await page.waitForSelector('.person-row', { timeout: 5000 });
 await capture(page, 'people');
 step('found a person by name');
 
-await page.click('.person-row');
+await page.click('.person-row:has-text("Marco")');
 await page.waitForSelector('.keypad');
 for (const key of ['1', '2', '.', '5', '0']) {
   await page.click(`.key[aria-label="${key}"]`);
 }
-await page.click('.emoji-pick:has-text("🍜")');
+await page.click('.template:has-text("Lunch")');
 await page.fill('.note-input', 'thai food');
 await capture(page, 'pay-amount');
 step('amount entered on the keypad', await page.textContent('.amount'));
@@ -195,6 +195,41 @@ if (chipCount > 0) {
   step('split requests sent');
 }
 
+// ---- a group with a running ledger ----------------------------------------
+await page.goto(`${BASE}/groups/new`, { waitUntil: 'load' });
+await page.waitForSelector('.person-chip');
+await page.fill('input[placeholder="Paris trip"]', 'Weekend away');
+await page.click('.emoji-pick:has-text("🏖️")');
+const groupChips = page.locator('.person-chip');
+for (let i = 0; i < Math.min(await groupChips.count(), 2); i++) await groupChips.nth(i).click();
+await capture(page, 'group-new');
+await page.click('button:has-text("Create group")');
+await page.waitForSelector('.group-bar', { timeout: 15000 });
+step('group created');
+
+await page.click('.group-bar');
+await page.waitForSelector('.group-actions');
+await page.click('button:has-text("Add an expense")');
+await page.waitForSelector('.sheet input[aria-label="Amount"]');
+await page.fill('.sheet input[aria-label="Amount"]', '120');
+await page.fill('.sheet input[aria-label="What did you pay for?"]', 'the apartment');
+await page.click('.sheet button:has-text("Add an expense")');
+await page.waitForSelector('.group-members', { timeout: 10000 });
+await page.waitForTimeout(500);
+await capture(page, 'group-balances');
+step('expense splits across the group', (await page.textContent('.group-total'))?.trim());
+
+// ---- a surprise -----------------------------------------------------------
+await page.goto(`${BASE}/pay/marco`, { waitUntil: 'load' });
+await page.waitForSelector('.keypad');
+for (const key of ['1', '5']) await page.click(`.key[aria-label="${key}"]`);
+await page.click('.gift-toggle');
+await capture(page, 'gift-send');
+await page.focus('.slider');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.success', { timeout: 20000 });
+step('surprise sent', 'amount hidden until opened');
+
 // ---- profile + QR ---------------------------------------------------------
 await page.goto(`${BASE}/me`, { waitUntil: 'load' });
 await page.waitForSelector('.qr:not(.qr-skeleton)', { timeout: 8000 });
@@ -206,6 +241,22 @@ await page.click('.row-button:has-text("Advanced")');
 await page.waitForSelector('.advanced');
 await capture(page, 'settings-advanced');
 step('technical details tucked behind Advanced');
+
+// ---- desktop --------------------------------------------------------------
+await page.setViewportSize({ width: 1280, height: 860 });
+await page.goto(`${BASE}/`, { waitUntil: 'load' });
+await page.waitForSelector('.sidebar', { timeout: 8000 });
+const tabbarHidden = await page.evaluate(() => {
+  const bar = document.querySelector('.tabbar');
+  return !bar || getComputedStyle(bar).display === 'none';
+});
+await capture(page, 'desktop-home');
+await page.goto(`${BASE}/t/marco`, { waitUntil: 'load' });
+await page.waitForSelector('.bubble');
+await page.waitForTimeout(500);
+await capture(page, 'desktop-thread');
+step('desktop layout', `sidebar shown, phone tab bar ${tabbarHidden ? 'hidden' : 'STILL VISIBLE'}`);
+await page.setViewportSize({ width: 390, height: 844 });
 
 // ---- light mode -----------------------------------------------------------
 await page.emulateMedia({ colorScheme: 'light' });

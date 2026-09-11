@@ -8,6 +8,8 @@ import { Store } from './db.js';
 import { HttpError } from './errors.js';
 import { Realtime } from './realtime.js';
 import { authRoutes } from './routes/auth.js';
+import { claimRoutes } from './routes/claims.js';
+import { groupRoutes } from './routes/groups.js';
 import { devRoutes } from './routes/dev.js';
 import { paymentRoutes, startPaymentWatcher } from './routes/payments.js';
 import { requestRoutes } from './routes/requests.js';
@@ -36,7 +38,7 @@ export async function buildServer(config: Config, options: { store?: Store; logg
 
   await app.register(cookie);
   await app.register(rateLimit, {
-    max: 120,
+    max: config.rateLimitMax,
     timeWindow: '1 minute',
     allowList: () => false,
   });
@@ -63,6 +65,8 @@ export async function buildServer(config: Config, options: { store?: Store; logg
     await threadRoutes(instance, ctx);
     await paymentRoutes(instance, ctx);
     await requestRoutes(instance, ctx);
+    await groupRoutes(instance, ctx);
+    await claimRoutes(instance, ctx);
     await streamRoutes(instance, ctx);
     await devRoutes(instance, ctx);
   });

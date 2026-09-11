@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { parseAmount } from '@solder/shared';
-import { signDigest } from './chain/eip3009.js';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { addressFromPrivateKey, signDigest } from './chain/eip3009.js';
 import { loadConfig } from './config.js';
 import { Store } from './db.js';
 import { devSeedFor } from './routes/auth.js';
@@ -54,7 +55,7 @@ class Client {
   }
 
   /** The full real flow: prepare, sign on the client, submit. */
-  async pay(to: string, amount: string, extra: { note?: string; emoji?: string; requestEventId?: string } = {}) {
+  async pay(to: string, amount: string, extra: Record<string, unknown> = {}) {
     const prepared = await this.call('POST', '/api/payments', {
       toHandle: to, amountMicros: parseAmount(amount).toString(), ...extra,
     });
@@ -115,6 +116,34 @@ export async function seed(store: Store, app: FastifyInstance): Promise<void> {
     toHandle: 'ana', amountMicros: parseAmount('16.25').toString(), note: 'movie tickets', emoji: '🎟️',
   })).event, 1 * HOUR);
 
+  // A surprise Marco has not opened yet.
+  at(await ana.pay('marco', '30.00', { gift: true, note: 'happy birthday', emoji: '🎂' }), 45 * MINUTE);
+
+  // A trip everyone is still settling up.
+  const trip = await ana.call('POST', '/api/groups', {
+    title: 'Paris trip', emoji: '🗼', handles: ['marco', 'jules', 'priya'],
+  });
+  await ana.call('POST', `/api/groups/${trip.threadId}/expenses`, {
+    amountMicros: parseAmount('420.00').toString(), note: 'the apartment', emoji: '🏠',
+  });
+  await marco.call('POST', `/api/groups/${trip.threadId}/expenses`, {
+    amountMicros: parseAmount('96.00').toString(), note: 'train tickets', emoji: '🚆',
+  });
+  await jules.call('POST', `/api/groups/${trip.threadId}/expenses`, {
+    amountMicros: parseAmount('142.50').toString(), note: 'dinner at Lupa', emoji: '🍽️',
+  });
+  await priya.call('POST', `/api/threads/${trip.threadId}/messages`, { body: 'worth every euro' });
+
+  // Money Ana sent to someone who is not here yet, still waiting to be picked up.
+  const holdingSeed = secp256k1.utils.randomPrivateKey();
+  const link = await ana.call('POST', '/api/claims', {
+    amountMicros: parseAmount('20.00').toString(), note: 'For Uber', emoji: '🚕',
+    escrowAddress: addressFromPrivateKey(holdingSeed), derivationRef: 'demo',
+  });
+  await ana.call('POST', `/api/claims/${link.claimId}/fund`, {
+    paymentId: link.paymentId, signatureB64: ana.sign(link.messageB64),
+  });
+
   // Payments confirm on a short delay, exactly as they do in the app.
   await new Promise((resolve) => setTimeout(resolve, 800));
   for (const payment of store.pendingPayments()) {
@@ -160,7 +189,8 @@ async function main(): Promise<void> {
     }));
     console.log(`Seeded ${PEOPLE.length} people on the ${config.chain} ledger:`);
     console.log(balances.join('\n'));
-    console.log('\nSign in as @ana to see it.');
+    console.log('\nIncluding a group mid-trip, an unopened surprise, and a money link nobody has picked up.');
+    console.log('Sign in as @ana to see it.');
   } finally {
     await server.close();
   }

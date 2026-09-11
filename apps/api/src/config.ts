@@ -19,6 +19,8 @@ export interface Config {
   sessionTtlMs: number;
   devLogin: boolean;
   dailySendLimitMicros: bigint;
+  /** Requests per minute per IP. Test runs all share 127.0.0.1, so they raise it. */
+  rateLimitMax: number;
   rpcUrl: string | null;
   relayerPrivateKey: string | null;
   usdcAddress: string | null;
@@ -53,6 +55,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     // The dev shortcut sign-in can never be enabled in production, whatever the env says.
     devLogin: env('DEV_LOGIN', '1') === '1' && !isProduction,
     dailySendLimitMicros: BigInt(env('DAILY_SEND_LIMIT_USD', '500')) * 1_000_000n,
+    rateLimitMax: Number(env('RATE_LIMIT_MAX', '120')),
     rpcUrl: process.env['RPC_URL'] || null,
     relayerPrivateKey: process.env['RELAYER_PRIVATE_KEY'] || null,
     usdcAddress: process.env['USDC_ADDRESS'] || null,

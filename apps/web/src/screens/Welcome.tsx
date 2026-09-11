@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { COPY } from '@solder/shared';
 import { Button } from '../components/Button.js';
 import { PinSheet } from '../components/PinSheet.js';
@@ -9,6 +9,9 @@ import { usePinPrompt } from '../lib/usePinPrompt.js';
 
 export function Welcome() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Onboarding can be interrupted by a link; come back to it afterwards.
+  const next = params.get('next') ?? '/';
   const [busy, setBusy] = useState(false);
   const pin = usePinPrompt();
 
@@ -18,7 +21,7 @@ export function Welcome() {
       await signIn(pin.request);
       store.signedIn();
       await store.load();
-      navigate('/', { replace: true });
+      navigate(next, { replace: true });
     } catch (error) {
       store.toast(friendly(error), 'bad');
     } finally {
