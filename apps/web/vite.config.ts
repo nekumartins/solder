@@ -32,6 +32,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
+        // Client-side routes fall back to the shell; API paths must not.
+        navigateFallbackDenylist: [/^\/api\//],
         // Money is never served from a cache: these read through to the network
         // and only fall back to the last known copy when offline.
         runtimeCaching: [

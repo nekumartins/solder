@@ -226,6 +226,16 @@ Everything has a working default; see `.env.example`. The ones that matter:
 | `DEV_LOGIN` | `1` | Shortcut sign-in for tests. Ignored when `NODE_ENV=production` |
 | `RP_ID` / `ORIGIN` | `localhost` / `http://localhost:5173` | WebAuthn relying party. `ORIGIN` accepts a comma-separated list |
 
+## Hosting it
+
+[DEPLOYING.md](DEPLOYING.md) has the steps. The short version: Vercel serves the PWA
+(`vercel.json` is ready; one placeholder to fill in), and the API needs an ordinary
+always-on Node process — it keeps a SQLite file, holds SSE connections open, and runs a
+watcher that advances payments to confirmed, none of which survive a serverless invocation.
+
+Or run the whole thing as one container: the API can serve the built PWA itself, which keeps
+everything on a single origin and leaves nothing to proxy.
+
 ## Not built yet
 
 - **Paying someone who hasn't joined.** It needs escrow and custody, so it is deliberately

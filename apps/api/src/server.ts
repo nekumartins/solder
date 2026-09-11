@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'node:fs';
 import { createChain } from './chain/index.js';
 import type { Config } from './config.js';
 import { AppContext } from './context.js';
@@ -74,6 +76,27 @@ export async function buildServer(config: Config, options: { store?: Store; logg
   app.get('/api/health', { config: { rateLimit: false } }, async () => ({
     ok: true, chain: config.chain,
   }));
+
+  // Optionally serve the built PWA, so a single container is the whole app and
+  // the browser only ever sees one origin — which keeps the session cookie
+  // first-party and passkeys bound to the domain people actually visit.
+  if (config.serveWeb) {
+    if (!existsSync(config.webRoot)) {
+      throw new Error(`SERVE_WEB=1 but ${config.webRoot} does not exist. Run \`npm run build\` first.`);
+    }
+    await app.register(fastifyStatic, { root: config.webRoot, index: false, wildcard: false });
+
+    app.setNotFoundHandler({ preHandler: app.rateLimit() }, (request, reply) => {
+      // An unknown /api path is a missing endpoint, never the app shell.
+      if (request.url.startsWith('/api/')) {
+        return reply.status(404).send({
+          error: { code: 'not_found', message: 'Nothing here' },
+        });
+      }
+      // Everything else is a client-side route: /@ana, /c/<id>, /t/marco.
+      return reply.sendFile('index.html');
+    });
+  }
 
   const watcher = startPaymentWatcher(ctx);
 
