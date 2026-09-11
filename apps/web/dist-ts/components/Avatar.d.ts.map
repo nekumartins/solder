@@ -1,0 +1,1 @@
+{"version":3,"file":"Avatar.d.ts","sourceRoot":"","sources":["../../src/components/Avatar.tsx"],"names":[],"mappings":"AAEA,UAAU,KAAK;IACb,MAAM,EAAE,MAAM,CAAC;IACf,WAAW,CAAC,EAAE,MAAM,CAAC;IACrB,IAAI,CAAC,EAAE,MAAM,CAAC;IACd,IAAI,CAAC,EAAE,OAAO,CAAC;CAChB;AAED,+EAA+E;AAC/E,wBAAgB,MAAM,CAAC,EAAE,MAAM,EAAE,WAAW,EAAE,IAAS,EAAE,IAAY,EAAE,EAAE,KAAK,+BAkB7E"}

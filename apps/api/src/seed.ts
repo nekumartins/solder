@@ -89,8 +89,8 @@ export async function seed(store: Store, app: FastifyInstance): Promise<void> {
 
   at(await marco.pay('ana', '22.00', { note: 'thai food', emoji: '🍜' }), 4 * DAY);
   at(await ana.pay('marco', '8.50', { note: 'coffee', emoji: '☕' }), 3 * DAY);
-  at((await marco.call('POST', '/api/threads/ana/messages', { body: 'that new place on 4th?' })).event, 3 * DAY - 20 * MINUTE);
-  at((await ana.call('POST', '/api/threads/marco/messages', { body: 'worth every penny' })).event, 3 * DAY - 18 * MINUTE);
+  at((await marco.call('POST', '/api/threads/ana/messages', { body: 'that new place on 4th?' })).event, 3 * DAY - 18 * MINUTE);
+  at((await ana.call('POST', '/api/threads/marco/messages', { body: 'worth every penny' })).event, 3 * DAY - 16 * MINUTE);
 
   const gift = at(await ana.pay('jules', '45.00', { note: 'your half of the gift', emoji: '🎁' }), 6 * DAY);
   at(await jules.pay('ana', '12.00', { note: 'cab home', emoji: '🚕' }), 5 * DAY);

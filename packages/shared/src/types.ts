@@ -27,6 +27,8 @@ export interface MeResponse {
   chain: ChainKind;
   /** True when this build allows the dev-only shortcut sign-in. */
   devLogin: boolean;
+  /** True on the local demo ledger, where money can be topped up on request. */
+  canFund: boolean;
 }
 
 export interface Reaction {

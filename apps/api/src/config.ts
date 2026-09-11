@@ -1,4 +1,14 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ChainKind } from '@solder/shared';
+
+/**
+ * Relative paths resolve against the repository root, not the working
+ * directory — otherwise `npm run seed` (which runs inside apps/api) and
+ * `npm run dev` (which runs from the root) would quietly use two different
+ * databases.
+ */
+const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 
 export interface Config {
   port: number;
@@ -12,6 +22,10 @@ export interface Config {
   solanaRpcUrl: string | null;
   relayerSecretKey: string | null;
   usdcMint: string | null;
+}
+
+function resolveFromRoot(path: string): string {
+  return path === ':memory:' ? path : resolve(REPO_ROOT, path);
 }
 
 function env(name: string, fallback: string): string {
@@ -30,7 +44,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   const config: Config = {
     port: Number(env('PORT', '8787')),
     chain,
-    databasePath: env('DATABASE_PATH', './data/solder.db'),
+    databasePath: resolveFromRoot(env('DATABASE_PATH', './data/solder.db')),
     rpId: env('RP_ID', 'localhost'),
     origins: origin.split(',').map((o) => o.trim()).filter(Boolean),
     sessionTtlMs: Number(env('SESSION_TTL_DAYS', '30')) * 24 * 60 * 60 * 1000,
