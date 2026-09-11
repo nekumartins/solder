@@ -50,6 +50,16 @@ input, textarea {
 }
 input::placeholder, textarea::placeholder { color: var(--faint); }
 
+/* Safari and Chrome paint autofilled fields their own shade of yellow, which
+   looks like a rendering fault against a dark theme. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+  caret-color: var(--text);
+}
+
 a { color: inherit; text-decoration: none; }
 
 h1, h2, h3, p { margin: 0; }

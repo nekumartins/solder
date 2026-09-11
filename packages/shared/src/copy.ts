@@ -187,9 +187,15 @@ export const COPY = {
     done: 'Done',
   },
 
+  connection: {
+    offline: 'You’re offline',
+    unreachable: 'Can’t reach Solder',
+  },
   errors: {
     generic: 'Something went wrong. Try again.',
     offline: "You're offline",
+    unreachable: 'Can’t reach Solder right now. Try again in a moment.',
+    cantCheck: 'Can’t check right now',
     session: 'Please sign in again',
     passkeyFailed: "We couldn't confirm it was you",
     passkeyUnsupported: 'This device can\'t create a secure sign-in yet.',

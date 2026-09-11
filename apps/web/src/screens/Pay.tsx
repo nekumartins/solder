@@ -32,7 +32,8 @@ export function Pay({ mode }: Props) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const me = useApp((state) => state.me);
-  const online = useApp((state) => state.online);
+  const connection = useApp((state) => state.connection);
+  const online = connection === 'ok';
   const pin = usePinPrompt();
 
   const [peer, setPeer] = useState<PublicUser | null>(null);
@@ -193,7 +194,11 @@ export function Pay({ mode }: Props) {
         <Keypad value={amount} onChange={setAmount} />
 
         <div className="pay-confirm">
-          {!online && <p className="pay-warn">{COPY.pay.offline}</p>}
+          {!online && (
+            <p className="pay-warn">
+              {connection === 'offline' ? COPY.pay.offline : COPY.errors.unreachable}
+            </p>
+          )}
           <SlideToSend
             label={mode === 'pay' ? COPY.pay.review : COPY.pay.reviewRequest}
             busyLabel={COPY.pay.confirming}

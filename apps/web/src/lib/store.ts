@@ -4,11 +4,17 @@ import { api, ApiError } from './api.js';
 
 export type Phase = 'loading' | 'signed-out' | 'ready';
 
+/**
+ * "Offline" and "the server is not answering" look the same to a naive check
+ * and need completely different words, so they are tracked apart.
+ */
+export type Connection = 'ok' | 'offline' | 'unreachable';
+
 export interface AppState {
   phase: Phase;
   me: MeResponse | null;
   threads: ThreadSummary[];
-  online: boolean;
+  connection: Connection;
   toast: { text: string; tone: 'good' | 'bad' } | null;
 }
 
@@ -16,9 +22,16 @@ let state: AppState = {
   phase: 'loading',
   me: null,
   threads: [],
-  online: typeof navigator === 'undefined' ? true : navigator.onLine,
+  connection: typeof navigator === 'undefined' || navigator.onLine ? 'ok' : 'offline',
   toast: null,
 };
+
+/** Only claim someone is offline when the browser says they are. */
+function connectionFor(error: unknown): Connection {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'offline';
+  if (error instanceof ApiError && error.code === 'offline') return 'offline';
+  return 'unreachable';
+}
 
 const listeners = new Set<() => void>();
 const threadListeners = new Set<(event: StreamEvent) => void>();
@@ -46,24 +59,24 @@ export const store = {
       await store.refreshThreads();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) return set({ phase: 'signed-out' });
-      set({ phase: state.me ? 'ready' : 'signed-out', online: false });
+      set({ phase: state.me ? 'ready' : 'signed-out', connection: connectionFor(error) });
     }
   },
 
   async refreshMe(): Promise<void> {
     try {
-      set({ me: await api.get<MeResponse>('/api/me'), online: true });
-    } catch {
-      set({ online: false });
+      set({ me: await api.get<MeResponse>('/api/me'), connection: 'ok' });
+    } catch (error) {
+      set({ connection: connectionFor(error) });
     }
   },
 
   async refreshThreads(): Promise<void> {
     try {
       const { threads } = await api.get<{ threads: ThreadSummary[] }>('/api/threads');
-      set({ threads, online: true });
-    } catch {
-      set({ online: false });
+      set({ threads, connection: 'ok' });
+    } catch (error) {
+      set({ connection: connectionFor(error) });
     }
   },
 
@@ -75,8 +88,8 @@ export const store = {
     set({ phase: 'signed-out', me: null, threads: [] });
   },
 
-  setOnline(online: boolean): void {
-    set({ online });
+  setConnection(connection: Connection): void {
+    set({ connection });
   },
 
   toast(text: string, tone: 'good' | 'bad' = 'good'): void {

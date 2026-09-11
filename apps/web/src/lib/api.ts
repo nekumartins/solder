@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '@solder/shared';
+import { COPY, type ApiErrorBody } from '@solder/shared';
 
 export class ApiError extends Error {
   readonly code: string;
@@ -21,13 +21,29 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
-    throw new ApiError(0, 'offline', "You're offline");
+    // fetch only rejects on a network-level failure. Being genuinely offline
+    // and failing to reach the server are different problems with different
+    // fixes, so they get different errors.
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    throw offline
+      ? new ApiError(0, 'offline', COPY.errors.offline)
+      : new ApiError(0, 'unreachable', COPY.errors.unreachable);
   }
 
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload: unknown = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      // Something between us and the API answered instead — a proxy, a gateway,
+      // an error page. Whatever it said, it is not the API, and showing a
+      // parser's complaint to someone trying to send money helps nobody.
+      throw new ApiError(response.status, 'unreachable', COPY.errors.unreachable);
+    }
+  }
 
   if (!response.ok) {
     const error = (payload as ApiErrorBody).error;

@@ -1,3 +1,4 @@
+import { COPY } from '@solder/shared';
 import { useApp } from '../lib/store.js';
 
 export function Toast() {
@@ -10,8 +11,16 @@ export function Toast() {
   );
 }
 
-export function OfflineBar() {
-  const online = useApp((state) => state.online);
-  if (online) return null;
-  return <div className="offline-bar" role="status">You’re offline</div>;
+/**
+ * Sits above the app rather than over it — a warning that hides the heading it
+ * is warning you about is worse than no warning.
+ */
+export function ConnectionBar() {
+  const connection = useApp((state) => state.connection);
+  if (connection === 'ok') return null;
+  return (
+    <div className="connection-bar" role="status">
+      {connection === 'offline' ? COPY.connection.offline : COPY.connection.unreachable}
+    </div>
+  );
 }

@@ -3,7 +3,8 @@
 .welcome {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: calc(var(--safe-t) + 8px) var(--gutter) calc(var(--safe-b) + 26px);
 }
 
@@ -253,7 +254,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   color: var(--brand);
   animation: fade-up 0.3s var(--ease);
 }
@@ -338,7 +340,8 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 30px var(--gutter) calc(var(--safe-b) + 30px);
   text-align: center;
 }
@@ -419,25 +422,28 @@
    sidebar does not exist. Above it, the conversation list moves into a
    permanent sidebar. */
 
-.pane { display: contents; }
+.shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
 .sidebar { display: none; }
 
 @media (min-width: 900px) {
   #root {
     max-width: 1180px;
-    flex-direction: row;
-    align-items: stretch;
     border-inline: 1px solid var(--line-soft);
   }
 
-  .pane {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    position: relative;
-    overflow: hidden;
-  }
+  .pane { overflow: hidden; }
 
   .sidebar {
     display: flex;

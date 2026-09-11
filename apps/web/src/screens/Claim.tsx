@@ -10,7 +10,7 @@ import { store } from '../lib/store.js';
 import { usePinPrompt } from '../lib/usePinPrompt.js';
 import { friendly } from './Welcome.js';
 
-type Availability = { state: 'idle' | 'checking' | 'free' | 'taken'; reason?: string };
+type Availability = { state: 'idle' | 'checking' | 'free' | 'taken' | 'unknown'; reason?: string };
 
 export function Claim() {
   const navigate = useNavigate();
@@ -38,7 +38,9 @@ export function Claim() {
           ? { state: 'free' }
           : { state: 'taken', reason: result.reason });
       } catch {
-        setAvailability({ state: 'idle' });
+        // Silently going back to idle leaves Continue disabled forever with
+        // nothing on screen explaining why.
+        setAvailability({ state: 'unknown', reason: COPY.errors.cantCheck });
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -118,5 +120,6 @@ function AvailabilityBadge({ availability }: { availability: Availability }) {
   if (availability.state === 'idle') return null;
   if (availability.state === 'checking') return <span className="badge">{COPY.claim.checking}</span>;
   if (availability.state === 'free') return <span className="badge badge-good">{COPY.claim.available}</span>;
+  if (availability.state === 'unknown') return <span className="badge">{availability.reason}</span>;
   return <span className="badge badge-bad">{availability.reason ?? COPY.claim.taken}</span>;
 }

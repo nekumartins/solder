@@ -3,7 +3,7 @@
 .screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -53,7 +53,7 @@
 }
 .icon-btn:active { transform: scale(0.92); }
 
-.boot { display: grid; place-items: center; height: 100%; }
+.boot { display: grid; place-items: center; flex: 1 1 auto; min-height: 0; }
 
 /* ---------- buttons ---------- */
 
@@ -501,16 +501,16 @@
 }
 .toast-bad { background: var(--danger); color: #fff; }
 
-.offline-bar {
-  position: absolute;
-  top: var(--safe-t);
-  left: 0;
-  right: 0;
+/* In the layout, not over it: the previous absolute bar covered the heading of
+   whatever screen it was warning about. */
+.connection-bar {
+  flex: none;
   z-index: 70;
   text-align: center;
   font-size: 12px;
   font-weight: 640;
-  padding: 5px;
+  padding: 5px 12px;
+  padding-top: calc(var(--safe-t) + 5px);
   background: var(--warm);
   color: #2a1a00;
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar.js';
 import { TabBar } from './components/TabBar.js';
-import { OfflineBar, Toast } from './components/Toast.js';
+import { ConnectionBar, Toast } from './components/Toast.js';
 import { connectStream, disconnectStream } from './lib/realtime.js';
 import { store, useApp } from './lib/store.js';
 import { Claim } from './screens/Claim.js';
@@ -28,8 +28,8 @@ export function App() {
   useEffect(() => { void store.load(); }, []);
 
   useEffect(() => {
-    const online = () => { store.setOnline(true); void store.refreshMe(); };
-    const offline = () => store.setOnline(false);
+    const online = () => { store.setConnection('ok'); void store.refreshMe(); };
+    const offline = () => store.setConnection('offline');
     window.addEventListener('online', online);
     window.addEventListener('offline', offline);
     return () => {
@@ -64,9 +64,12 @@ export function App() {
 
   return (
     <>
-      <OfflineBar />
-      {wide && <Sidebar />}
-      <main className="pane">
+      <ConnectionBar />
+      {/* The banner is a row above everything; the shell below it is the row
+          that becomes sidebar-plus-pane on a wide screen. */}
+      <div className="shell">
+        {wide && <Sidebar />}
+        <main className="pane">
       <Routes>
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/claim" element={<Claim />} />
@@ -85,7 +88,8 @@ export function App() {
         <Route path="/:handle" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      </main>
+        </main>
+      </div>
       <TabBar />
       <Toast />
     </>

@@ -16,7 +16,7 @@ export function connectStream(): void {
 
   source.onmessage = (message) => {
     retry = 0;
-    store.setOnline(true);
+    store.setConnection('ok');
     try {
       store.apply(JSON.parse(message.data) as StreamEvent);
     } catch {
@@ -27,7 +27,7 @@ export function connectStream(): void {
   source.onerror = () => {
     source?.close();
     source = null;
-    store.setOnline(false);
+    store.setConnection('unreachable');
     const delay = Math.min(1000 * 2 ** retry++, 30_000);
     window.clearTimeout(timer);
     timer = window.setTimeout(connectStream, delay);
