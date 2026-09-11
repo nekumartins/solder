@@ -74,6 +74,16 @@ The secret lives in the URL fragment and must never be sent to the server, logge
 server stores only the holding address and a derivation salt. See SECURITY.md for what this
 trades away.
 
+## Each workspace owns the tools it runs
+
+A workspace that runs `tsc` declares `typescript` and `@types/node` itself rather than
+leaning on the root's devDependencies being hoisted beside it. Locally hoisting hides the
+difference; an install scoped to one workspace — which a deploy host may well do — does not,
+and `"types": ["node"]` then fails with TS2688.
+
+`packages/shared` builds with `tsc -b --force`: plain `tsc -b` trusts its tsbuildinfo and
+silently emits nothing when `dist` has been deleted.
+
 ## Paths resolve against the repo root
 
 `DATABASE_PATH` and friends resolve from the repository root, not `process.cwd()` — npm

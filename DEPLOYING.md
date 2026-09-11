@@ -42,6 +42,16 @@ Proxying `/api` through the Vercel domain rather than calling the API directly m
 - **passkeys bind to one domain** — WebAuthn ties credentials to the site you visit, so the
   browser must only ever see the Vercel origin
 
+### If the build runs in the wrong place
+
+Vercel's **Root Directory** setting decides where it installs and builds. It should be the
+repository root — that is where `vercel.json` lives, and where `apps/web/dist` resolves from.
+
+You can tell it is wrong from the build log: if it installs ~120 packages instead of ~550, or
+runs a build for `@solder/api`, it is scoped to one workspace. Every workspace declares the
+tools its own build needs, so that will not fail — but it will not produce the web app
+either, because `outputDirectory` is relative to the root directory Vercel chose.
+
 ## The API half
 
 Any host that runs a container and can mount a disk: Fly.io, Railway, Render, a VPS. The
