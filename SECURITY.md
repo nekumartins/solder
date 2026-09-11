@@ -101,6 +101,39 @@ anything: an unsubmitted authorisation simply expires.
 - A transfer nobody signs is reaped along with its event, so a cancelled biometric prompt
   leaves no trace.
 
+## Leaving with your key
+
+Self-custody you cannot exercise is just a nicer word for custody, so Settings → Advanced →
+Export your key hands over the raw secp256k1 key as `0x`-prefixed hex, ready to paste into
+any Ethereum wallet.
+
+It is the one door in the app deliberately made awkward:
+
+- A warning first, stating plainly that anyone holding the key can spend the money without
+  any face or fingerprint check.
+- **A fresh identity check every time.** `reauthenticate()` locks the wallet before unlocking
+  it, so an already-unlocked session is never enough — someone who picks up an unlocked phone
+  still cannot export.
+- The key stays blurred until it is asked for a second time, and is dropped from memory when
+  the sheet closes.
+- It is derived and displayed entirely on the device. No endpoint returns it, and no request
+  is made to show it. The server could not hand it over if it wanted to.
+
+### What exporting gives up
+
+**There is no way to un-export.** The exported key and the in-app account are the same
+account, so from that moment two copies exist and Solder cannot tell whether the other one
+has leaked. The app will keep working normally, which is exactly what makes this worth
+stating.
+
+A production version should offer rotation — generate a fresh key and sweep the balance to
+it, so an exported key stops being live. That is not implemented. Until it is, treat an
+export as permanent.
+
+Copying to the clipboard is offered because it is what people actually need, but clipboards
+persist and are readable by other apps on most platforms. The copy confirmation says to clear
+it.
+
 ## Money sent to someone who has no account
 
 A link is a bearer instrument, and it is worth being blunt about what that means.

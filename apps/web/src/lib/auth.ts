@@ -60,6 +60,15 @@ export async function unlock(requestPin: PinPrompt, handle?: string): Promise<vo
   await restoreWallet(prfOutput, requestPin);
 }
 
+/**
+ * Always asks, even if the wallet is already unlocked. Handing over the key
+ * itself should never ride on a session someone else could have walked up to.
+ */
+export async function reauthenticate(requestPin: PinPrompt, handle?: string): Promise<void> {
+  wallet.lock();
+  await unlock(requestPin, handle);
+}
+
 export async function signOut(): Promise<void> {
   await api.post('/api/auth/logout');
   await wallet.forget();

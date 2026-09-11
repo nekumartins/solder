@@ -55,6 +55,14 @@ export function signMessage(seed: Uint8Array, messageB64: string): string {
   return bytesToBase64(packed);
 }
 
+/**
+ * The key in the form every Ethereum wallet expects. Only ever called from the
+ * export screen, behind a fresh identity check.
+ */
+export function privateKeyHex(seed: Uint8Array): string {
+  return `0x${bytesToHex(seed)}`;
+}
+
 /** EIP-55: mixed case that makes a mistyped address detectable. */
 function toChecksumAddress(lower: string): string {
   const hashed = bytesToHex(keccak_256(new TextEncoder().encode(lower)));

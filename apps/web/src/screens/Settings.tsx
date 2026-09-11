@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { COPY } from '@solder/shared';
 import { Button } from '../components/Button.js';
+import { ExportKey } from '../components/ExportKey.js';
 import { Screen } from '../components/Screen.js';
 import { signOut } from '../lib/auth.js';
 import { store, useApp } from '../lib/store.js';
@@ -15,6 +16,7 @@ export function Settings() {
   const navigate = useNavigate();
   const me = useApp((state) => state.me);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const install = useInstallPrompt();
 
   const leave = async (): Promise<void> => {
@@ -77,15 +79,33 @@ export function Settings() {
               <span>{COPY.settings.accountKey}</span>
               <span className="row-value mono">{short(me?.user.accountKey)}</span>
             </button>
+            <button className="row-item row-button" onClick={() => setExporting(true)}>
+              <span>{COPY.export.row}</span>
+              <span className="row-value">
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                  <path d="M12 15V4m0 0L8 8m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"
+                    fill="none" stroke="currentColor" strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
             <p className="advanced-note">
               Your money lives in an Ethereum account this app set up for you. Nobody, including
-              this app’s servers, can move it without your face or fingerprint.
+              this app’s servers, can move it without your face or fingerprint — and it is yours
+              to take with you.
             </p>
           </div>
         )}
       </section>
 
       <Button size="lg" variant="danger" onClick={leave}>{COPY.settings.signOut}</Button>
+
+      <ExportKey
+        open={exporting}
+        onClose={() => setExporting(false)}
+        accountKey={me?.user.accountKey ?? null}
+        isDemoLedger={me?.chain === 'sim'}
+      />
     </Screen>
   );
 }

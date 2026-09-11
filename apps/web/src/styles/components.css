@@ -717,3 +717,38 @@
   color: var(--text);
   margin: 10px 0 2px;
 }
+
+/* ---------- exporting a key ---------- */
+
+.export-warning {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--danger);
+  background: var(--danger-wash);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.export-field { display: flex; flex-direction: column; gap: 5px; }
+.export-label { font-size: 12px; font-weight: 650; color: var(--muted); }
+.export-value {
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  width: 100%;
+  display: block;
+}
+.export-secret { min-height: 62px; color: var(--text); }
+.export-secret:not(.is-visible) { display: grid; place-items: center; }
+.export-cover {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--muted);
+}
+.export-actions { display: flex; gap: 8px; }
+.export-actions .btn { flex: 1; }

@@ -242,6 +242,35 @@ await page.waitForSelector('.advanced');
 await capture(page, 'settings-advanced');
 step('technical details tucked behind Advanced');
 
+// ---- the key is theirs to take ---------------------------------------------
+await page.click('.row-button:has-text("Export your key")');
+await page.waitForSelector('.export-warning');
+await page.waitForTimeout(500); // let the sheet finish sliding up
+await capture(page, 'export-warning');
+
+await page.click('button:has-text("I understand")');
+await page.waitForSelector('.export-secret', { timeout: 20000 });
+const hiddenAtFirst = (await page.textContent('.export-secret'))?.includes('Tap to reveal');
+await page.click('.export-secret');
+await page.waitForSelector('.export-secret.is-visible');
+await page.waitForTimeout(300);
+const exported = (await page.textContent('.export-secret'))?.trim() ?? '';
+const shownAddress = (await page.textContent('.export-field .export-value'))?.trim() ?? '';
+await capture(page, 'export-key');
+
+if (!/^0x[0-9a-f]{64}$/.test(exported)) throw new Error(`not a usable key: ${exported.slice(0, 12)}…`);
+// The key must actually control the account the app says it does.
+const { secp256k1 } = await import('/home/user/solder/node_modules/@noble/curves/secp256k1.js');
+const { keccak_256 } = await import('/home/user/solder/node_modules/@noble/hashes/sha3.js');
+const derived = '0x' + Buffer.from(
+  keccak_256(secp256k1.getPublicKey(Buffer.from(exported.slice(2), 'hex'), false).slice(1)),
+).toString('hex').slice(-40);
+if (derived.toLowerCase() !== shownAddress.toLowerCase()) {
+  throw new Error(`exported key controls ${derived}, not ${shownAddress}`);
+}
+step('key exports and controls the right account',
+  `hidden until asked: ${hiddenAtFirst ? 'yes' : 'NO'}, derives ${shownAddress.slice(0, 10)}…`);
+
 // ---- desktop --------------------------------------------------------------
 await page.setViewportSize({ width: 1280, height: 860 });
 await page.goto(`${BASE}/`, { waitUntil: 'load' });

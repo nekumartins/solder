@@ -15,7 +15,7 @@ addresses, no seed phrase, no gas to think about.
 | Friction | What Solder does instead |
 | --- | --- |
 | **Wallet addresses** | People have handles. You pay `@marco`, find friends by name, or share a link and a QR code. An account key exists, but it lives under Settings → Advanced and you never need it. |
-| **Seed phrases** | Your key is generated in your browser and encrypted with a key derived from your **passkey** (WebAuthn PRF). The ciphertext is backed up to the server, which has no way to open it. There is no phrase, because there is nothing for you to memorise. |
+| **Seed phrases** | Your key is generated in your browser and encrypted with a key derived from your **passkey** (WebAuthn PRF). The ciphertext is backed up to the server, which has no way to open it. There is no phrase, because there is nothing for you to memorise — and if you want the key itself, Settings → Advanced hands it over in a form any Ethereum wallet accepts. |
 | **Gas, ETH, "approve this transaction"** | Payments are **EIP-3009 authorisations**: you sign one off-chain and a relayer submits it and pays the gas. You never hold ETH and never see a fee. Confirming a payment is a Face ID prompt, not a signing dialog. |
 
 Every payment is a message in a conversation. Notes, emoji, reactions, money requests you
@@ -208,7 +208,12 @@ of thirteen banned terms.
 
 There is also a test that walks every user-facing string and fails if a banned word
 ("seed phrase", "gas", "blockchain", …) appears — the no-jargon rule is enforced, not just
-intended.
+intended. It has exactly one exemption, `COPY.export`, and the test asserts that: someone
+deliberately moving their key into MetaMask needs the real words, and calling it anything
+softer would leave them not knowing what they are holding.
+
+The e2e derives an address from the exported key and checks it matches the account the app
+shows, so "export" cannot silently become "export something useless".
 
 ## Configuration
 

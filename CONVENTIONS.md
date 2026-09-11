@@ -41,6 +41,16 @@ build if a banned word appears, and asserts "USDC" is named exactly once (the ba
 subtitle). Say *account* not address, *payment* not transaction; fees are simply not
 mentioned. Technical detail belongs under Settings → Advanced and nowhere else.
 
+## The jargon ban has exactly one exemption
+
+`COPY.export`, listed in `EXEMPT_FROM_BAN` and asserted by `copy.test.ts`. Exporting a key is
+the one screen where "private key" helps rather than hinders, because the person reading it is
+about to paste it somewhere specific. Do not widen the list by deleting entries from
+`BANNED_WORDS` — add an argued-for exemption, or reword.
+
+Export is client-side only and must stay that way: no endpoint returns key material, and
+`reauthenticate()` forces a fresh check rather than trusting the unlock window.
+
 ## SQL lives in one file
 
 `apps/api/src/db.ts`. Everything else talks to the `Store` class. Row casts go through

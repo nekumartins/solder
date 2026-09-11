@@ -163,6 +163,30 @@ export const COPY = {
     install: 'Install',
     iosInstall: 'Tap Share, then "Add to Home Screen".',
   },
+  /**
+   * The one section allowed to use the real words.
+   *
+   * Everywhere else, "private key" is jargon that helps nobody. Here it is the
+   * opposite: someone deliberately moving their key into another wallet needs
+   * the exact term, or they will not know what they are holding or where it
+   * goes. Precision is the kinder choice on this screen — see EXEMPT_FROM_BAN.
+   */
+  export: {
+    row: 'Export your key',
+    title: 'Export your key',
+    warning: 'This is the private key to your account. Anyone who has it can spend your money — on any device, without your face or fingerprint.',
+    neverShare: 'Never share it. Nobody from Solder will ever ask you for it.',
+    confirm: 'I understand — show it',
+    tapToReveal: 'Tap to reveal',
+    addressLabel: 'Account address',
+    keyLabel: 'Private key',
+    copy: 'Copy',
+    copied: 'Copied. Paste it somewhere safe, then clear your clipboard.',
+    importHint: 'You can import this into any Ethereum wallet. It controls the same account, so money you move there leaves here too.',
+    simNote: 'This key is real, but the local demo ledger is not a network any other wallet can reach.',
+    done: 'Done',
+  },
+
   errors: {
     generic: 'Something went wrong. Try again.',
     offline: "You're offline",
@@ -172,6 +196,14 @@ export const COPY = {
     noBackup: "We couldn't find your account on this device",
   },
 } as const;
+
+/**
+ * Sections exempt from the jargon ban, and the only ones.
+ *
+ * Keeping this list explicit means an exemption has to be argued for rather
+ * than acquired by someone quietly deleting a word from BANNED_WORDS.
+ */
+export const EXEMPT_FROM_BAN: readonly string[] = ['COPY.export'];
 
 /** Words that must never appear in user-facing strings. */
 export const BANNED_WORDS: readonly string[] = [
