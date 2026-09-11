@@ -8,11 +8,10 @@ import type {
   AuthenticationExtensionsClientInputs, AuthenticationResponseJSON, AuthenticatorTransport,
   RegistrationResponseJSON,
 } from '@simplewebauthn/server';
-import { ed25519 } from '@noble/curves/ed25519';
-import bs58 from 'bs58';
 import type { AppContext } from '../context.js';
 import { badRequest, conflict, notFound, unauthorized } from '../errors.js';
 import { clearSession, issueSession } from '../session.js';
+import { addressFromPrivateKey } from '../chain/eip3009.js';
 import { asObject, handleArg, str } from '../validate.js';
 
 /** The PRF input the client uses to derive its vault key. Constant by design. */
@@ -181,10 +180,10 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
       if (!user) throw notFound('no_account', 'Run `npm run seed` first');
 
       const seed = devSeedFor(handle);
-      const pubkey = bs58.encode(ed25519.getPublicKey(seed));
+      const address = addressFromPrivateKey(seed);
       if (!user.pubkey) {
-        store.setUserPubkey(user.id, pubkey);
-        await chain.ensureAccount(pubkey);
+        store.setUserPubkey(user.id, address);
+        await chain.ensureAccount(address);
       }
 
       issueSession(store, config, reply, user.id);

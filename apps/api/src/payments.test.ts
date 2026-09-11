@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ed25519 } from '@noble/curves/ed25519';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { formatUsd, parseAmount } from '@solder/shared';
-import { SimulatedChain } from './chain/simulated.js';
+import {
+  addressFromPrivateKey, authorizationDigest, signDigest,
+} from './chain/eip3009.js';
+import { DEMO_DOMAIN, SimulatedChain, demoAuthorization } from './chain/simulated.js';
 import { harness } from './testkit.js';
 
 test('money moves from one person to the other', async (t) => {
@@ -54,7 +57,11 @@ test('a signature over different bytes is refused', async (t) => {
   await ana.fund('100');
 
   const prepared = await ana.prepare('marco', '10');
-  const forged = Buffer.from('SOLDER-TRANSFER-V1|evt_x|a|b|1|9').toString('base64');
+  // A perfectly valid signature — over an authorisation nobody asked for.
+  const forged = Buffer.from(authorizationDigest(DEMO_DOMAIN, demoAuthorization(
+    { ref: 'evt_elsewhere', from: ana.accountKey, to: ana.accountKey, micros: parseAmount('10') },
+    Date.now() + 60_000,
+  ))).toString('base64');
 
   const response = await ana.raw('POST', `/api/payments/${prepared.paymentId}/submit`, {
     signatureB64: ana.sign(forged),
@@ -82,38 +89,48 @@ test('someone else\'s signature is refused', async (t) => {
   assert.equal(await ana.balance(), 100_000_000n);
 });
 
-test('tampered message bytes never reach the ledger', async (t) => {
+test('tampered authorisations never reach the ledger', async (t) => {
   const app = await harness();
   t.after(() => app.close());
 
-  const store = app.ctx.store;
-  const chain = new SimulatedChain(store);
-  const seed = ed25519.utils.randomPrivateKey();
-  const from = (await import('bs58')).default.encode(ed25519.getPublicKey(seed));
-  const to = (await import('bs58')).default.encode(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
+  const chain = new SimulatedChain(app.ctx.store);
+  const seed = secp256k1.utils.randomPrivateKey();
+  const from = addressFromPrivateKey(seed);
+  const to = addressFromPrivateKey(secp256k1.utils.randomPrivateKey());
   await chain.ensureAccount(from);
   await chain.fund(from, parseAmount('100'));
 
-  const prepared = await chain.prepareTransfer({ ref: 'evt_1', from, to, micros: parseAmount('10') });
-
-  // Rewrite the amount after the server composed it, then sign the new bytes.
-  const original = Buffer.from(prepared.messageB64, 'base64').toString('utf8');
-  const tampered = original.replace('|10000000|', '|99000000|');
-  const tamperedB64 = Buffer.from(tampered, 'utf8').toString('base64');
-  const signature = Buffer.from(ed25519.sign(Buffer.from(tampered, 'utf8'), seed)).toString('base64');
-
   const record = { ref: 'evt_1', from, to, micros: parseAmount('10') };
+  const prepared = await chain.prepareTransfer(record);
+
+  // Re-authorise a bigger amount to a different person, and sign that properly.
+  // The signature is valid; it just does not say what the server recorded.
+  const tampered = authorizationDigest(DEMO_DOMAIN, demoAuthorization(
+    { ...record, to: addressFromPrivateKey(secp256k1.utils.randomPrivateKey()), micros: parseAmount('99') },
+    prepared.expiresAt,
+  ));
   await assert.rejects(
-    () => chain.submitTransfer({ transfer: record, messageB64: tamperedB64, signatureB64: signature }),
+    () => chain.submitTransfer({
+      transfer: record,
+      messageB64: Buffer.from(tampered).toString('base64'),
+      signatureB64: Buffer.from(signDigest(tampered, seed)).toString('base64'),
+      expiresAt: prepared.expiresAt,
+    }),
     (error: Error) => /verified/.test(error.message),
   );
+  assert.equal(await chain.getBalance(from), parseAmount('100'));
 
-  // The untampered bytes still go through, so the check is not simply refusing everything.
-  const honest = Buffer.from(ed25519.sign(Buffer.from(original, 'utf8'), seed)).toString('base64');
+  // The honest authorisation still goes through, so the check is not simply
+  // refusing everything.
+  const honest = Buffer.from(prepared.messageB64, 'base64');
   const ok = await chain.submitTransfer({
-    transfer: record, messageB64: prepared.messageB64, signatureB64: honest,
+    transfer: record,
+    messageB64: prepared.messageB64,
+    signatureB64: Buffer.from(signDigest(honest, seed)).toString('base64'),
+    expiresAt: prepared.expiresAt,
   });
   assert.equal(ok.status, 'pending');
+  assert.match(ok.signature, /^0x[0-9a-f]{64}$/);
   assert.equal(await chain.getBalance(from), parseAmount('90'));
 });
 

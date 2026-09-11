@@ -1,7 +1,6 @@
-import { ed25519 } from '@noble/curves/ed25519';
 import type { FastifyInstance } from 'fastify';
-import bs58 from 'bs58';
 import { parseAmount } from '@solder/shared';
+import { addressFromPrivateKey, signDigest } from './chain/eip3009.js';
 import { loadConfig, type Config } from './config.js';
 import { Store } from './db.js';
 import { devSeedFor } from './routes/auth.js';
@@ -17,7 +16,7 @@ export class Actor {
   constructor(readonly app: FastifyInstance, readonly handle: string) {}
 
   get seed(): Uint8Array { return devSeedFor(this.handle); }
-  get accountKey(): string { return bs58.encode(ed25519.getPublicKey(this.seed)); }
+  get accountKey(): string { return addressFromPrivateKey(this.seed); }
 
   async raw(method: 'GET' | 'POST' | 'PUT', url: string, payload?: unknown) {
     const response = await this.app.inject({
@@ -45,7 +44,7 @@ export class Actor {
   }
 
   sign(messageB64: string): string {
-    return Buffer.from(ed25519.sign(Buffer.from(messageB64, 'base64'), this.seed)).toString('base64');
+    return Buffer.from(signDigest(Buffer.from(messageB64, 'base64'), this.seed)).toString('base64');
   }
 
   async fund(amount: string): Promise<void> {

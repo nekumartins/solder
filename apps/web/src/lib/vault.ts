@@ -1,5 +1,5 @@
-import { ed25519 } from '@noble/curves/ed25519';
-import bs58 from 'bs58';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { keccak_256 } from '@noble/hashes/sha3';
 import { base64ToBytes, bytesToBase64, randomBytes } from './bytes.js';
 
 /**
@@ -29,17 +29,45 @@ export interface Wallet {
 }
 
 export function createWallet(): Wallet {
-  const seed = randomBytes(32);
+  // Not every 32-byte string is a valid secp256k1 key; the odds of needing a
+  // second draw are astronomically small, but the loop costs nothing.
+  let seed = randomBytes(32);
+  while (!secp256k1.utils.isValidPrivateKey(seed)) seed = randomBytes(32);
   return { seed, accountKey: accountKeyFor(seed) };
 }
 
+/** The account's Ethereum address, checksummed. */
 export function accountKeyFor(seed: Uint8Array): string {
-  return bs58.encode(ed25519.getPublicKey(seed));
+  const publicKey = secp256k1.getPublicKey(seed, false);
+  return toChecksumAddress(bytesToHex(keccak_256(publicKey.subarray(1)).subarray(12)));
 }
 
-/** Signs the opaque bytes the server prepared. */
+/**
+ * Signs the opaque bytes the server prepared — an EIP-712 digest authorising
+ * one transfer to one person. Packed as r || s || v, the shape the token
+ * contract recovers from.
+ */
 export function signMessage(seed: Uint8Array, messageB64: string): string {
-  return bytesToBase64(ed25519.sign(base64ToBytes(messageB64), seed));
+  const signature = secp256k1.sign(base64ToBytes(messageB64), seed);
+  const packed = new Uint8Array(65);
+  packed.set(signature.toCompactRawBytes(), 0);
+  packed[64] = signature.recovery + 27;
+  return bytesToBase64(packed);
+}
+
+/** EIP-55: mixed case that makes a mistyped address detectable. */
+function toChecksumAddress(lower: string): string {
+  const hashed = bytesToHex(keccak_256(new TextEncoder().encode(lower)));
+  let out = '0x';
+  for (let i = 0; i < lower.length; i++) {
+    const char = lower[i]!;
+    out += /[a-f]/.test(char) && parseInt(hashed[i]!, 16) >= 8 ? char.toUpperCase() : char;
+  }
+  return out;
+}
+
+function bytesToHex(input: Uint8Array): string {
+  return Array.from(input, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export async function deriveKeyFromPrf(prfOutput: Uint8Array, salt: Uint8Array): Promise<CryptoKey> {

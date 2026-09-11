@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "test": "node --no-warnings=ExperimentalWarning --import tsx --test src/*.test.ts"
+    "prepare": "tsc -b",
+    "test": "node --no-warnings=ExperimentalWarning --import tsx --test \"src/**/*.test.ts\""
   }
 }

@@ -19,10 +19,12 @@ export interface Config {
   sessionTtlMs: number;
   devLogin: boolean;
   dailySendLimitMicros: bigint;
-  solanaRpcUrl: string | null;
-  relayerSecretKey: string | null;
-  usdcMint: string | null;
+  rpcUrl: string | null;
+  relayerPrivateKey: string | null;
+  usdcAddress: string | null;
 }
+
+const NETWORKS: ChainKind[] = ['sim', 'ethereum', 'sepolia', 'base', 'base-sepolia'];
 
 function resolveFromRoot(path: string): string {
   return path === ':memory:' ? path : resolve(REPO_ROOT, path);
@@ -36,8 +38,8 @@ function env(name: string, fallback: string): string {
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const isProduction = process.env['NODE_ENV'] === 'production';
   const chain = env('CHAIN', 'sim') as ChainKind;
-  if (!['sim', 'devnet', 'mainnet'].includes(chain)) {
-    throw new Error(`CHAIN must be sim, devnet or mainnet (got "${chain}")`);
+  if (!NETWORKS.includes(chain)) {
+    throw new Error(`CHAIN must be one of ${NETWORKS.join(', ')} (got "${chain}")`);
   }
 
   const origin = env('ORIGIN', 'http://localhost:5173');
@@ -51,16 +53,16 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     // The dev shortcut sign-in can never be enabled in production, whatever the env says.
     devLogin: env('DEV_LOGIN', '1') === '1' && !isProduction,
     dailySendLimitMicros: BigInt(env('DAILY_SEND_LIMIT_USD', '500')) * 1_000_000n,
-    solanaRpcUrl: process.env['SOLANA_RPC_URL'] || null,
-    relayerSecretKey: process.env['RELAYER_SECRET_KEY'] || null,
-    usdcMint: process.env['USDC_MINT'] || null,
+    rpcUrl: process.env['RPC_URL'] || null,
+    relayerPrivateKey: process.env['RELAYER_PRIVATE_KEY'] || null,
+    usdcAddress: process.env['USDC_ADDRESS'] || null,
     ...overrides,
   };
 
   if (config.chain !== 'sim') {
     const missing = [
-      !config.solanaRpcUrl && 'SOLANA_RPC_URL',
-      !config.relayerSecretKey && 'RELAYER_SECRET_KEY',
+      !config.rpcUrl && 'RPC_URL',
+      !config.relayerPrivateKey && 'RELAYER_PRIVATE_KEY',
     ].filter(Boolean);
     if (missing.length > 0) {
       throw new Error(

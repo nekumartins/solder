@@ -134,6 +134,7 @@ export async function paymentRoutes(app: FastifyInstance, ctx: AppContext): Prom
         },
         messageB64: prepared.message_b64,
         signatureB64,
+        expiresAt: prepared.expires_at,
       });
     } catch (error) {
       store.setEventStatus(event.id, 'failed');

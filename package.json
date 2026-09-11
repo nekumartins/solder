@@ -2,17 +2,23 @@
   "name": "solder",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "concurrently -n api,web -c green,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev": "npm run shared && concurrently -n api,web -c green,cyan \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run dev -w @solder/api",
     "dev:web": "npm run dev -w @solder/web",
     "build": "npm run build -w @solder/shared && npm run build -w @solder/web",
-    "test": "npm run test -w @solder/shared && npm run test -w @solder/api",
-    "seed": "npm run seed -w @solder/api",
+    "test": "npm run shared && npm run test -w @solder/shared && npm run test -w @solder/api",
+    "seed": "npm run shared && npm run seed -w @solder/api",
     "typecheck": "tsc -b --pretty false",
-    "e2e": "node --no-warnings=ExperimentalWarning scripts/e2e.mjs"
+    "e2e": "node --no-warnings=ExperimentalWarning scripts/e2e.mjs",
+    "shared": "npm run build -w @solder/shared"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

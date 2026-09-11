@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { requireUser } from '../session.js';
+import { isAddress, sameAddress } from '../chain/eip3009.js';
 import { asObject, str } from '../validate.js';
 
 const MAX_BLOB_BYTES = 8 * 1024;
@@ -28,11 +29,11 @@ export async function vaultRoutes(app: FastifyInstance, ctx: AppContext): Promis
     } catch {
       throw badRequest('bad_blob', 'Unsupported backup format');
     }
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pubkey)) {
+    if (!isAddress(pubkey)) {
       throw badRequest('bad_account_key', 'Unsupported account key');
     }
 
-    if (user.pubkey && user.pubkey !== pubkey) {
+    if (user.pubkey && !sameAddress(user.pubkey, pubkey)) {
       throw conflict('account_key_set', 'This account already has money set up');
     }
     const owner = store.getUserByPubkey(pubkey);

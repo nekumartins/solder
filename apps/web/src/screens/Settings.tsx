@@ -78,7 +78,7 @@ export function Settings() {
               <span className="row-value mono">{short(me?.user.accountKey)}</span>
             </button>
             <p className="advanced-note">
-              Your money lives in a Solana account this app set up for you. Nobody, including
+              Your money lives in an Ethereum account this app set up for you. Nobody, including
               this app’s servers, can move it without your face or fingerprint.
             </p>
           </div>
@@ -91,12 +91,14 @@ export function Settings() {
 }
 
 function networkLabel(chain?: string): string {
-  if (chain === 'mainnet') return 'Solana';
-  if (chain === 'devnet') return 'Solana (test network)';
+  if (chain === 'ethereum') return 'Ethereum';
+  if (chain === 'base') return 'Base';
+  if (chain === 'sepolia') return 'Ethereum (test network)';
+  if (chain === 'base-sepolia') return 'Base (test network)';
   return 'Local demo ledger';
 }
 
 function short(key?: string | null): string {
   if (!key) return '—';
-  return `${key.slice(0, 4)}…${key.slice(-4)}`;
+  return `${key.slice(0, 6)}…${key.slice(-4)}`;
 }

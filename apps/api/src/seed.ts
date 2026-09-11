@@ -1,6 +1,6 @@
-import { ed25519 } from '@noble/curves/ed25519';
 import type { FastifyInstance } from 'fastify';
 import { parseAmount } from '@solder/shared';
+import { signDigest } from './chain/eip3009.js';
 import { loadConfig } from './config.js';
 import { Store } from './db.js';
 import { devSeedFor } from './routes/auth.js';
@@ -49,9 +49,8 @@ class Client {
   }
 
   sign(messageB64: string): string {
-    const seed = devSeedFor(this.handle);
-    const signature = ed25519.sign(Buffer.from(messageB64, 'base64'), seed);
-    return Buffer.from(signature).toString('base64');
+    const digest = Buffer.from(messageB64, 'base64');
+    return Buffer.from(signDigest(digest, devSeedFor(this.handle))).toString('base64');
   }
 
   /** The full real flow: prepare, sign on the client, submit. */

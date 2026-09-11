@@ -6,7 +6,7 @@
 export type EventKind = 'payment' | 'request' | 'note' | 'system';
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed';
 export type RequestStatus = 'open' | 'paid' | 'declined' | 'cancelled';
-export type ChainKind = 'sim' | 'devnet' | 'mainnet';
+export type ChainKind = 'sim' | 'ethereum' | 'sepolia' | 'base' | 'base-sepolia';
 
 export interface PublicUser {
   handle: string;
@@ -15,7 +15,7 @@ export interface PublicUser {
 
 export interface Me extends PublicUser {
   id: string;
-  /** Base58 account key. Only ever surfaced under Settings -> Advanced. */
+  /** The account's Ethereum address. Only ever surfaced under Settings -> Advanced. */
   accountKey: string | null;
   createdAt: number;
 }

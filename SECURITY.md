@@ -4,14 +4,15 @@ Solder holds money, so it is worth being precise about who can do what. This doc
 written to be read by someone deciding whether to trust it — including the parts that argue
 against doing so.
 
-**This is a prototype. It has not been audited. Do not put real money in it.**
+**This is a prototype. It has not been audited, and its on-chain path has never run against
+a real network. Do not put real money in it.**
 
 ## What the server can and cannot do
 
 | | |
 | --- | --- |
-| **Can** | Refuse a payment, see who pays whom and how much, read notes and messages (they are stored in plaintext), delete your account, pay the network fee for a transfer it composed. |
-| **Cannot** | Move your money. Decrypt your key backup. Produce a valid signature on your behalf. |
+| **Can** | Refuse a payment, see who pays whom and how much, read notes and messages (they are stored in plaintext), delete your account, pay the gas to publish a transfer you authorised. |
+| **Cannot** | Move your money. Redirect a payment you authorised. Decrypt your key backup. Produce a valid signature on your behalf. |
 
 The private key is generated in your browser and encrypted there. The server stores a blob it
 has no key for. `vault.ts` never parses it beyond checking it is JSON under 8 KB, and the
@@ -20,7 +21,7 @@ test asserts so it cannot quietly change.
 
 ## How the key is protected
 
-1. A 32-byte ed25519 seed is generated with `crypto.getRandomValues`.
+1. A 32-byte secp256k1 key is generated with `crypto.getRandomValues`.
 2. Your passkey's **PRF extension** produces 32 bytes for the fixed input `"solder-vault-v1"`.
    That output never leaves the device.
 3. `HKDF-SHA256(prf, salt, "solder-vault-v1")` → an AES-GCM-256 key → the seed is encrypted.
@@ -44,40 +45,59 @@ minutes) slows down *getting* the blob; it does nothing once someone has it.
 The app only offers the PIN path when PRF is genuinely unavailable. If you are deploying this
 for real, consider requiring PRF outright.
 
-## Why the server composes transactions
+## Why EIP-3009, and not `permit`
 
-The relayer pays the fee for every payment, which makes it a standing target: anyone who can
-get it to sign arbitrary bytes can drain its SOL, or worse.
+The obvious gasless path on Ethereum is ERC-2612 `permit` plus `transferFrom`. It is the
+wrong one here: a permit signature authorises an **allowance** to a spender, and whoever
+holds that allowance chooses the recipient of the transfer that follows. The relayer would be
+able to send your money wherever it liked.
 
-So the client never composes what the relayer signs. `POST /api/payments` builds the transfer
-server-side and stores the message bytes; the client returns only a signature. At submit
-time the adapter re-derives what those bytes must say from the server's own row:
+EIP-3009's `transferWithAuthorization` binds `from`, `to`, `value`, a validity window and a
+nonce into the signature itself. The relayer's only power is to publish that exact transfer,
+or to publish nothing. That is a meaningfully smaller amount of trust.
 
-- **`SimulatedChain`** rebuilds the canonical message string from the stored ref, sender,
-  recipient and amount, and compares byte-for-byte.
-- **`SolanaChain`** decompiles the versioned message and checks: no address-table lookups,
-  exactly two required signers, fee payer is the relayer, second signer is the sender, and
-  every instruction is either an idempotent ATA creation for the expected recipient or a
-  single `TransferChecked` with the expected mint, decimals, amount, source and destination.
-  Anything else is refused.
+## Why the server composes authorisations
+
+The relayer pays the gas for every payment, which makes it a standing target.
+
+So the client never composes what it signs. `POST /api/payments` builds the authorisation
+server-side and stores the digest; the client receives 32 bytes and returns a 65-byte
+signature. At submit time the adapter rebuilds the authorisation from the server's own row —
+the ref, sender, recipient, amount and deadline it recorded — recomputes the digest, and
+refuses to submit if the bytes differ by so much as one bit. Both adapters do this; it is not
+a property of the chain, it is a property of the flow.
+
+The nonce is `keccak256("solder-authorization:" + eventId)`. EIP-3009 nonces need only be
+unique per sender, never sequential, so there is no nonce queue to manage and no ordering to
+get wrong under concurrency.
 
 Additional limits: a per-person daily cap (`DAILY_SEND_LIMIT_USD`, default $500), 20 payment
 creations per minute, 120 requests per minute overall.
 
 ### Residual relayer exposure
 
-The relayer still pays rent for a token account the first time anyone receives money, and a
-fee per payment. Someone with many accounts can burn the relayer's SOL within the rate limits.
-A production deployment needs invite gating, a funded-account requirement, or per-account
-budgets. None of that is implemented here.
+The relayer pays gas per payment and holds ETH to do it. Someone with many accounts can burn
+that balance within the rate limits, and on mainnet a gas spike makes each payment cost real
+money. A production deployment needs invite gating, per-account budgets, and a gas ceiling
+above which payments queue rather than send. None of that is implemented here. Fund the
+relayer with only what you can afford to lose, and prefer an L2 where a transfer costs
+fractions of a cent.
+
+Note that a failed or front-run submission costs the relayer gas but cannot cost the *sender*
+anything: an unsubmitted authorisation simply expires.
 
 ## Replay, tampering and expiry
 
-- Prepared transfers expire after 60 seconds (matching a Solana blockhash lifetime).
+- Authorisations carry a `validBefore` 60 seconds out, enforced both by the server and by the
+  token contract itself.
 - `consumePrepared` is a conditional `UPDATE … WHERE consumed = 0`, so only the first submit
   for a payment can proceed even under concurrent requests.
-- The simulated ledger enforces a unique constraint on the payment reference, so the same
-  transfer cannot land twice.
+- The token contract records every used nonce, so an authorisation cannot be replayed
+  on-chain even if someone captures it. The adapter checks `authorizationState` before
+  submitting, which turns a guaranteed revert into a clean error instead of wasted gas. The
+  simulated ledger enforces the same uniqueness on the payment reference.
+- The digest includes the chain id and the token's address, so a signature made for one
+  network or one token is meaningless on any other.
 - A transfer nobody signs is reaped along with its event, so a cancelled biometric prompt
   leaves no trace.
 
@@ -97,16 +117,26 @@ asserts it returns 404 when disabled.
 
 ## What is stored in plaintext
 
-Handles, display names, account public keys, payment amounts, payment notes, chat messages,
+Handles, display names, account addresses, payment amounts, payment notes, chat messages,
 reactions and split membership. Solder is not a private messenger. Notes are deliberately
 kept off-chain so they are not published to the world, but the server can read them.
 
-## Known dependency advisories
+On-chain, every payment is a public `Transfer` between two addresses. Handles are not on
+chain, but anyone who learns one person's address can read their whole payment history and
+balance. Real privacy would need a different design; this is the normal state of affairs for
+a token on a public ledger, and it is worth being clear that Solder does not fix it.
 
-`@solana/web3.js` v1 pulls in `bigint-buffer`, `stream-json` and `uuid` versions with open
-advisories. They are transitive and unfixable without abandoning web3.js v1. They are
-**server-only** and the adapter is **lazily imported**, so the default `CHAIN=sim` setup never
-loads any of them, and no Solana code reaches the browser bundle at all.
+## Dependencies
+
+`npm audit` reports zero vulnerabilities. `viem` is server-only and lazily imported, so the
+default `CHAIN=sim` setup never loads it and no Ethereum client library reaches the browser
+bundle. The client's cryptography is `@noble/curves` and `@noble/hashes` — small, audited, and
+the same primitives the server verifies with.
+
+The EIP-712 encoding is hand-written (`apps/api/src/chain/eip3009.ts`) so the exact bytes
+being signed are readable in one file rather than assembled inside a dependency. It is
+checked against viem's implementation in the test suite; if the two ever disagree, the tests
+fail.
 
 ## Reporting
 

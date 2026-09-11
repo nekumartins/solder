@@ -153,8 +153,10 @@ export class Store {
     return (this.q('SELECT * FROM users WHERE handle = ?').get(handle) as UserRow | undefined) ?? null;
   }
 
+  /** Addresses are compared case-insensitively: the checksum casing is cosmetic. */
   getUserByPubkey(pubkey: string): UserRow | null {
-    return (this.q('SELECT * FROM users WHERE pubkey = ?').get(pubkey) as UserRow | undefined) ?? null;
+    const row = this.q('SELECT * FROM users WHERE lower(pubkey) = lower(?)').get(pubkey);
+    return (row as UserRow | undefined) ?? null;
   }
 
   setUserPubkey(id: string, pubkey: string): void {

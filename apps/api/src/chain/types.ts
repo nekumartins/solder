@@ -27,7 +27,7 @@ export interface TransferRequest {
  * two backends.
  */
 export interface ChainAdapter {
-  readonly kind: 'sim' | 'solana';
+  readonly kind: 'sim' | 'ethereum';
   /** True when the ledger can hand out money on request (local sim only). */
   readonly canFund: boolean;
   ensureAccount(pubkey: string): Promise<void>;
@@ -42,6 +42,8 @@ export interface ChainAdapter {
     transfer: TransferRequest;
     messageB64: string;
     signatureB64: string;
+    /** The deadline this authorisation was prepared with, from our own row. */
+    expiresAt: number;
   }): Promise<SubmitResult>;
   getStatus(signature: string): Promise<TxStatus>;
   fund?(pubkey: string, micros: bigint): Promise<void>;
