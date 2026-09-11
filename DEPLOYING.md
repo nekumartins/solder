@@ -42,15 +42,22 @@ Proxying `/api` through the Vercel domain rather than calling the API directly m
 - **passkeys bind to one domain** — WebAuthn ties credentials to the site you visit, so the
   browser must only ever see the Vercel origin
 
-### If the build runs in the wrong place
+### `No Output Directory named "dist" found after the Build completed`
 
-Vercel's **Root Directory** setting decides where it installs and builds. It should be the
-repository root — that is where `vercel.json` lives, and where `apps/web/dist` resolves from.
+The Root Directory is wrong. Vercel reads `vercel.json` **from the Root Directory**, so with
+it set to a workspace, the config at the repository root is never read at all — which is why
+Vercel falls back to looking for a plain `dist` instead of the `apps/web/dist` the file asks
+for.
 
-You can tell it is wrong from the build log: if it installs ~120 packages instead of ~550, or
-runs a build for `@solder/api`, it is scoped to one workspace. Every workspace declares the
-tools its own build needs, so that will not fail — but it will not produce the web app
-either, because `outputDirectory` is relative to the root directory Vercel chose.
+**Project → Settings → General → Root Directory.** Clear it so it points at the repository
+root, then redeploy.
+
+Other signs of the same thing in the build log: an install of ~120 packages instead of ~550,
+or a build running for `@solder/api`. Every workspace declares the tools its own build needs,
+so that no longer errors — but it cannot produce the web app either.
+
+Note that `apps/api` is not a Vercel target at all. It has no web output to serve, and it
+could not run there anyway — see the table above.
 
 ## The API half
 
