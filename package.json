@@ -16,7 +16,7 @@
     "build": "npm run build -w @solder/shared && npm run build -w @solder/web",
     "test": "npm run shared && npm run test -w @solder/shared && npm run test -w @solder/api",
     "seed": "npm run shared && npm run seed -w @solder/api",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "tsc -b --pretty false && tsc -p packages/shared/tsconfig.test.json --pretty false",
     "e2e": "node --no-warnings=ExperimentalWarning scripts/e2e.mjs",
     "shared": "npm run build -w @solder/shared",
     "mvp-test": "node --no-warnings=ExperimentalWarning scripts/mvp-test.mjs"
