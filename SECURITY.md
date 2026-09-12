@@ -167,6 +167,26 @@ hash is stored, so a database leak cannot be replayed as a login. `secure` is se
 automatically when `ORIGIN` is HTTPS. WebAuthn challenges are single-use and expire in five
 minutes.
 
+## The passkey domain
+
+A passkey is bound to the domain the browser saw, so the server's idea of that domain has to
+agree or every sign-in fails with *"the requested RPID did not match the origin"*. A value
+fixed at boot is wrong the moment the app moves — a preview URL, a custom domain, a host that
+hands out a name after the process starts — so unless `RP_ID` or `ORIGIN` is set, the server
+takes it from each request: the browser's `Origin` header, or the proxy's `X-Forwarded-Host`
+and `X-Forwarded-Proto` when there is no `Origin` (`relyingParty` in `routes/auth.ts`).
+
+What that gives up: someone who can reach the server with a `Host` header of their choosing —
+directly, or through a proxy that does not pin one — can have it issue and verify passkeys for
+*their* domain. That does not get them into anyone's account. A credential is scoped by the
+browser to the domain it was created on, so an assertion signed for `evil.example` can never
+be replayed against the real one, and the victim's authenticator will not sign for a domain it
+has no credential for. The worst of it is that an attacker can create accounts on this server
+using passkeys only they can use — which is also true of simply signing up.
+
+Set `RP_ID` (and `ORIGIN`) once the app has a domain it should stay on. Then the request is
+ignored entirely, and a passkey created anywhere else is refused.
+
 ## The development sign-in
 
 `POST /api/dev/login` hands out a session and a known key without a passkey. It is disabled

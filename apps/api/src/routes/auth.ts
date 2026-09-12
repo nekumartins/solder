@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   generateAuthenticationOptions, generateRegistrationOptions,
   verifyAuthenticationResponse, verifyRegistrationResponse,
@@ -14,8 +14,43 @@ import { clearSession, issueSession } from '../session.js';
 import { addressFromPrivateKey } from '../chain/eip3009.js';
 import { asObject, handleArg, str } from '../validate.js';
 
-/** The PRF input the client uses to derive its vault key. Constant by design. */
+/** What the passkey prompt calls us. Shown by the operating system, not by us. */
 const RP_NAME = 'Solder';
+
+/**
+ * Which domain a passkey belongs to.
+ *
+ * A passkey is bound to the domain the browser saw, so this has to agree with
+ * wherever the app is actually being served — and a value fixed at startup
+ * drifts the moment the app moves, giving "the requested RPID did not match
+ * the origin". Unless RP_ID or ORIGIN pins it, take it from the request.
+ */
+function relyingParty(config: AppContext['config'], request: FastifyRequest): {
+  rpId: string; origins: string[];
+} {
+  if (config.domainPinned) return { rpId: config.rpId, origins: config.origins };
+
+  const origin = requestOrigin(request);
+  if (!origin) return { rpId: config.rpId, origins: config.origins };
+  try {
+    return { rpId: new URL(origin).hostname, origins: [origin] };
+  } catch {
+    return { rpId: config.rpId, origins: config.origins };
+  }
+}
+
+function requestOrigin(request: FastifyRequest): string | null {
+  const sent = request.headers.origin;
+  if (typeof sent === 'string' && sent !== '' && sent !== 'null') return sent;
+
+  // No Origin header (a plain navigation, say): rebuild it from the proxy's
+  // own view of the request.
+  const host = request.headers['x-forwarded-host'] ?? request.headers.host;
+  if (typeof host !== 'string' || host === '') return null;
+  const forwarded = request.headers['x-forwarded-proto'];
+  const proto = typeof forwarded === 'string' ? forwarded.split(',')[0]!.trim() : request.protocol;
+  return `${proto}://${host}`;
+}
 
 export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
   const { store, config, chain } = ctx;
@@ -26,9 +61,10 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
     const displayName = str(body['displayName'], 'Display name', { max: 40 });
     if (store.getUserByHandle(handle)) throw conflict('handle_taken', 'That name is already taken');
 
+    const { rpId } = relyingParty(config, request);
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
-      rpID: config.rpId,
+      rpID: rpId,
       userName: handle,
       userDisplayName: displayName,
       attestationType: 'none',
@@ -57,11 +93,12 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
 
     let verification;
     try {
+      const { rpId, origins } = relyingParty(config, request);
       verification = await verifyRegistrationResponse({
         response,
         expectedChallenge: challenge.challenge,
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpId,
+        expectedOrigin: origins,
+        expectedRPID: rpId,
         requireUserVerification: false,
       });
     } catch {
@@ -91,7 +128,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
       return created;
     });
 
-    issueSession(store, config, reply, user.id);
+    issueSession(store, config, request, reply, user.id);
     return { user: { handle: user.handle, displayName: user.display_name }, prfSupported };
   });
 
@@ -110,8 +147,9 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
       }
     }
 
+    const { rpId } = relyingParty(config, request);
     const options = await generateAuthenticationOptions({
-      rpID: config.rpId,
+      rpID: rpId,
       userVerification: 'preferred',
       ...(allowCredentials ? { allowCredentials } : {}),
       extensions: { prf: {} } as AuthenticationExtensionsClientInputs,
@@ -135,11 +173,12 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
 
     let verification;
     try {
+      const { rpId, origins } = relyingParty(config, request);
       verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge: challenge.challenge,
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpId,
+        expectedOrigin: origins,
+        expectedRPID: rpId,
         requireUserVerification: false,
         credential: {
           id: credential.id,
@@ -157,7 +196,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
     const user = store.getUser(credential.user_id);
     if (!user) throw notFound('no_account', "We couldn't find your account");
 
-    issueSession(store, config, reply, user.id);
+    issueSession(store, config, request, reply, user.id);
     return {
       user: { handle: user.handle, displayName: user.display_name },
       hasVault: store.getVault(user.id) !== null,
@@ -186,7 +225,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
         await chain.ensureAccount(address);
       }
 
-      issueSession(store, config, reply, user.id);
+      issueSession(store, config, request, reply, user.id);
       return {
         user: { handle: user.handle, displayName: user.display_name },
         secretKeyB64: Buffer.from(seed).toString('base64'),

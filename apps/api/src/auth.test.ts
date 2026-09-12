@@ -69,6 +69,74 @@ test('registration offers a passkey with the key-deriving extension enabled', as
   assert.equal(app.ctx.store.getUserByHandle('newcomer'), null);
 });
 
+test('an unpinned deployment takes the passkey domain from the request', async (t) => {
+  const app = await harness({ domainPinned: false, rpId: 'localhost', origins: ['http://localhost:5173'] });
+  t.after(() => app.close());
+
+  const response = await app.app.inject({
+    method: 'POST', url: '/api/auth/register/options',
+    headers: { host: 'solder.up.railway.app', 'x-forwarded-proto': 'https' },
+    payload: { handle: 'newcomer', displayName: 'New Comer' },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().options.rp.id, 'solder.up.railway.app');
+});
+
+test('a browser-sent origin wins over the host header', async (t) => {
+  const app = await harness({ domainPinned: false, rpId: 'localhost', origins: ['http://localhost:5173'] });
+  t.after(() => app.close());
+
+  const response = await app.app.inject({
+    method: 'POST', url: '/api/auth/login/options',
+    headers: { host: 'internal-proxy:8080', origin: 'https://pay.example.com' },
+    payload: {},
+  });
+  assert.equal(response.json().options.rpId, 'pay.example.com');
+});
+
+test('an explicitly configured domain is never overridden by the request', async (t) => {
+  const app = await harness({ domainPinned: true, rpId: 'solder.app', origins: ['https://solder.app'] });
+  t.after(() => app.close());
+
+  const response = await app.app.inject({
+    method: 'POST', url: '/api/auth/register/options',
+    headers: { host: 'evil.example.com', origin: 'https://evil.example.com' },
+    payload: { handle: 'newcomer', displayName: 'New Comer' },
+  });
+  assert.equal(response.json().options.rp.id, 'solder.app');
+});
+
+test('the session cookie is Secure exactly when the request arrived over https', async (t) => {
+  const app = await harness({ domainPinned: false, origins: ['http://localhost:5173'] });
+  t.after(() => app.close());
+  app.ctx.store.createUser('ana', 'Ana');
+
+  const cookieFor = async (headers: Record<string, string>): Promise<string> => {
+    const response = await app.app.inject({
+      method: 'POST', url: '/api/dev/login', headers, payload: { handle: 'ana' },
+    });
+    const set = response.headers['set-cookie']!;
+    return Array.isArray(set) ? set[0]! : String(set);
+  };
+
+  assert.match(await cookieFor({ 'x-forwarded-proto': 'https' }), /Secure/);
+  // A Secure cookie over plain http is dropped, which would lock out local dev.
+  assert.doesNotMatch(await cookieFor({}), /Secure/);
+});
+
+test('a pinned https origin keeps the cookie Secure whatever the request says', async (t) => {
+  const app = await harness({ domainPinned: true, origins: ['https://solder.app'] });
+  t.after(() => app.close());
+  app.ctx.store.createUser('ana', 'Ana');
+
+  const response = await app.app.inject({
+    method: 'POST', url: '/api/dev/login',
+    headers: { 'x-forwarded-proto': 'http' }, payload: { handle: 'ana' },
+  });
+  const set = response.headers['set-cookie']!;
+  assert.match(Array.isArray(set) ? set[0]! : String(set), /Secure/);
+});
+
 test('a challenge cannot be replayed', async (t) => {
   const app = await harness();
   t.after(() => app.close());

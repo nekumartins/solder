@@ -16,6 +16,12 @@ export interface Config {
   databasePath: string;
   rpId: string;
   origins: string[];
+  /**
+   * True when RP_ID or ORIGIN was given explicitly. When it is false the
+   * passkey domain is taken from each request instead, so the app works on
+   * whatever hostname it happens to be served from.
+   */
+  domainPinned: boolean;
   sessionTtlMs: number;
   devLogin: boolean;
   dailySendLimitMicros: bigint;
@@ -63,12 +69,14 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   }
 
   const domain = publicDomain();
+  const pinned = Boolean(process.env['RP_ID'] || process.env['ORIGIN']);
   const origin = env('ORIGIN', domain ? `https://${domain}` : 'http://localhost:5173');
   const config: Config = {
     port: Number(env('PORT', '8787')),
     chain,
     databasePath: resolveFromRoot(env('DATABASE_PATH', './data/solder.db')),
     rpId: env('RP_ID', domain || 'localhost'),
+    domainPinned: pinned,
     origins: origin.split(',').map((o) => o.trim()).filter(Boolean),
     sessionTtlMs: Number(env('SESSION_TTL_DAYS', '30')) * 24 * 60 * 60 * 1000,
     // The dev shortcut sign-in can never be enabled in production, whatever the env says.

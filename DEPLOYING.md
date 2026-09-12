@@ -76,9 +76,12 @@ That is enough for a working app. The image sets `SERVE_WEB=1`, so the service s
 as well as the API — **the Railway URL on its own is the whole thing**, on one origin, with
 nothing to proxy and no Vercel involved.
 
-You do not need to set `ORIGIN` or `RP_ID`. The server reads `RAILWAY_PUBLIC_DOMAIN`, which
-Railway injects, and derives both from it — so passkeys and the session cookie bind to the
-domain it just gave you. Setting either by hand always wins.
+You do not need to set `ORIGIN` or `RP_ID`. Left unset, the server takes the passkey domain
+from each request, so passkeys bind to whatever hostname the browser actually visited —
+the URL Railway generated, or a custom domain added later, without a redeploy. Setting
+either by hand pins it to that value instead and the request is ignored; do that once the
+app has a domain it should stay on. See [SECURITY.md](SECURITY.md#the-passkey-domain) for
+what following the request gives up.
 
 ### Add a volume, or the ledger resets
 
@@ -115,8 +118,8 @@ Everything has a working default. These are the ones worth knowing:
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `PORT` | injected by the host | Falls back to 8787. The app binds `0.0.0.0`. |
-| `ORIGIN` | `https://$RAILWAY_PUBLIC_DOMAIN` | WebAuthn checks it, and it decides whether the cookie is `Secure`. Comma-separated for more than one. |
-| `RP_ID` | `$RAILWAY_PUBLIC_DOMAIN` | The passkey's domain. **No scheme, no port.** |
+| `ORIGIN` | the domain of the request | WebAuthn checks it, and it decides whether the cookie is `Secure`. Comma-separated for more than one. |
+| `RP_ID` | the domain of the request | The passkey's domain. **No scheme, no port.** Setting it pins the app to that one domain. |
 | `DATABASE_PATH` | `/app/data/solder.db` | Set by the image. Mount the volume there. |
 | `NODE_ENV` | `production` | Set by the image. Turns the dev sign-in off for good. |
 | `CHAIN` | `sim` | Or `base` / `ethereum` / `sepolia` / `base-sepolia`. |
