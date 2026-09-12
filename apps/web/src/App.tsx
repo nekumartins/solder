@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar.js';
-import { TabBar } from './components/TabBar.js';
+import { TabBar, hasTabBar } from './components/TabBar.js';
 import { ConnectionBar, Toast } from './components/Toast.js';
 import { connectStream, disconnectStream } from './lib/realtime.js';
 import { store, useApp } from './lib/store.js';
@@ -67,7 +67,7 @@ export function App() {
       <ConnectionBar />
       {/* The banner is a row above everything; the shell below it is the row
           that becomes sidebar-plus-pane on a wide screen. */}
-      <div className="shell">
+      <div className={`shell ${hasTabBar(location.pathname) ? 'has-tabbar' : ''}`}>
         {wide && <Sidebar />}
         <main className="pane">
       <Routes>

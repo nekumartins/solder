@@ -22,8 +22,10 @@ body {
 #root {
   display: flex;
   flex-direction: column;
-  /* dvh keeps the layout honest when mobile browser chrome slides away. */
-  height: 100dvh;
+  /* dvh keeps the layout honest when mobile browser chrome slides away; the
+     on-screen keyboard it does not account for, so viewport.ts overrides
+     --app-h with what is actually visible. */
+  height: var(--app-h, 100dvh);
   max-width: 560px;
   margin: 0 auto;
   position: relative;
@@ -77,6 +79,10 @@ h1, h2, h3, p { margin: 0; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
+/* A scrolling column scrolls; it never squashes. A flex child that clips its
+   own overflow loses the automatic minimum size that would otherwise stop it,
+   which is how the balance card ended up cropped to its label. */
+.scroll > * { flex-shrink: 0; }
 
 .sr-only {
   position: absolute;

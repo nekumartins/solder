@@ -54,7 +54,16 @@ export function Split() {
   };
 
   return (
-    <Screen title={COPY.split.title} back="/" className="split">
+    <Screen
+      title={COPY.split.title}
+      back="/"
+      className="split"
+      foot={(
+        <Button size="lg" disabled={!ready || busy} busy={busy} onClick={ask}>
+          {COPY.split.send}
+        </Button>
+      )}
+    >
       <AmountDisplay
         value={amount}
         hint={ready
@@ -94,10 +103,6 @@ export function Split() {
       )}
 
       <Keypad value={amount} onChange={setAmount} />
-
-      <Button size="lg" disabled={!ready || busy} busy={busy} onClick={ask}>
-        {COPY.split.send}
-      </Button>
     </Screen>
   );
 }

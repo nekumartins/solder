@@ -20,13 +20,18 @@ const TABS = [
   },
 ];
 
+// Conversations, payment flows and onboarding own their full height — a
+// conversation has its own composer where the tab bar would sit. Screens that
+// go without it must not reserve room for it either, hence the export.
+const FULL_HEIGHT = ['/pay', '/request', '/welcome', '/claim', '/split', '/t/', '/link', '/c/', '/groups/new'];
+
+export function hasTabBar(pathname: string): boolean {
+  return !FULL_HEIGHT.some((prefix) => pathname.startsWith(prefix));
+}
+
 export function TabBar() {
   const { pathname } = useLocation();
-  // Conversations, payment flows and onboarding own their full height — a
-  // conversation has its own composer where the tab bar would sit.
-  const hidden = ['/pay', '/request', '/welcome', '/claim', '/split', '/t/', '/link', '/c/', '/groups/new'].some((prefix) =>
-    pathname.startsWith(prefix));
-  if (hidden) return null;
+  if (!hasTabBar(pathname)) return null;
 
   return (
     <nav className="tabbar" aria-label="Main">

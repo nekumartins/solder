@@ -133,15 +133,16 @@ export function SendLink() {
           />
         </div>
         <Keypad value={amount} onChange={setAmount} />
-        <div className="pay-confirm">
-          <SlideToSend
-            label={COPY.link.sendByLink}
-            busyLabel={COPY.pay.confirming}
-            disabled={!ready}
-            busy={busy}
-            onConfirm={create}
-          />
-        </div>
+      </div>
+
+      <div className="pay-confirm">
+        <SlideToSend
+          label={COPY.link.sendByLink}
+          busyLabel={COPY.pay.confirming}
+          disabled={!ready}
+          busy={busy}
+          onConfirm={create}
+        />
       </div>
 
       <PinSheet open={pin.open} reason={pin.reason} onSubmit={pin.submit} onCancel={pin.cancel} />

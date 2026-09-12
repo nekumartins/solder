@@ -192,21 +192,23 @@ export function Pay({ mode }: Props) {
         </div>
 
         <Keypad value={amount} onChange={setAmount} />
+      </div>
 
-        <div className="pay-confirm">
-          {!online && (
-            <p className="pay-warn">
-              {connection === 'offline' ? COPY.pay.offline : COPY.errors.unreachable}
-            </p>
-          )}
-          <SlideToSend
-            label={mode === 'pay' ? COPY.pay.review : COPY.pay.reviewRequest}
-            busyLabel={COPY.pay.confirming}
-            disabled={!ready}
-            busy={busy}
-            onConfirm={confirm}
-          />
-        </div>
+      {/* Deliberately a sibling of the scrolling body: whatever else is on
+          screen, the way to send is always in reach. */}
+      <div className="pay-confirm">
+        {!online && (
+          <p className="pay-warn">
+            {connection === 'offline' ? COPY.pay.offline : COPY.errors.unreachable}
+          </p>
+        )}
+        <SlideToSend
+          label={mode === 'pay' ? COPY.pay.review : COPY.pay.reviewRequest}
+          busyLabel={COPY.pay.confirming}
+          disabled={!ready}
+          busy={busy}
+          onConfirm={confirm}
+        />
       </div>
 
       <PinSheet open={pin.open} reason={pin.reason} onSubmit={pin.submit} onCancel={pin.cancel} />

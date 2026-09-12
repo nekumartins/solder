@@ -8,11 +8,13 @@ interface Props {
   action?: ReactNode;
   lead?: ReactNode;
   children: ReactNode;
+  /** Sits below the scrolling body, so a primary action is never scrolled off. */
+  foot?: ReactNode;
   bare?: boolean;
   className?: string;
 }
 
-export function Screen({ title, subtitle, back, action, lead, children, bare, className = '' }: Props) {
+export function Screen({ title, subtitle, back, action, lead, children, foot, bare, className = '' }: Props) {
   const navigate = useNavigate();
   const showHeader = Boolean(title || back || action || lead);
 
@@ -45,6 +47,7 @@ export function Screen({ title, subtitle, back, action, lead, children, bare, cl
         </header>
       )}
       {bare ? children : <div className="scroll screen-body">{children}</div>}
+      {foot ? <div className="screen-foot">{foot}</div> : null}
     </div>
   );
 }

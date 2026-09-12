@@ -5,6 +5,9 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  /* On a short screen the art gives way first, and the rest scrolls rather
+     than losing its last line off the bottom. */
+  overflow-y: auto;
   padding: calc(var(--safe-t) + 8px) var(--gutter) calc(var(--safe-b) + 26px);
 }
 
@@ -68,7 +71,7 @@
 .claim-preview { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0 12px; }
 .claim-preview-name { font-size: 17px; font-weight: 650; margin-top: 8px; }
 .claim-preview-handle { font-size: 14px; color: var(--muted); }
-.claim-note { font-size: 13px; color: var(--faint); text-align: center; margin-top: auto; padding-top: 12px; }
+.claim-note { font-size: 13px; color: var(--faint); text-align: center; padding-top: 4px; }
 
 /* ---------- home ---------- */
 
@@ -193,16 +196,17 @@
 .pay-body {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--gutter) calc(var(--safe-b) + 16px);
+  padding: 0 var(--gutter);
 }
-/* The pad takes whatever room is left so the screen has no dead middle, but
-   min-content stops it shrinking under its own rows on a short screen — where
-   the whole body scrolls instead. */
-.pay-body { overflow-y: auto; }
-.pay-body .keypad { flex: 1 1 auto; min-height: min-content; }
-.pay-body > .amount-display, .pay-body > .pay-confirm { flex: none; }
+/* The pad takes whatever room is left so the screen has no dead middle, and
+   gives it back first when there is not enough — its rows have their own
+   floor, below which the body scrolls instead. Past the cap the spare room
+   goes above the pad, keeping the keys under the thumb on a tall phone. */
+.pay-body .keypad { flex: 1 1 auto; min-height: 0; max-height: 330px; margin-top: auto; }
+.pay-body > .amount-display { flex: none; }
 .note-row {
   display: flex;
   flex-direction: column;
@@ -240,12 +244,20 @@
   padding: 0 15px;
   border-radius: var(--radius-full);
   background: var(--surface-2);
-  font-size: 15px;
+  /* Under 16px and iOS zooms the whole page the moment it is focused. */
+  font-size: 16px;
   width: 100%;
 }
 .note-input-wide { margin-bottom: 4px; }
 
-.pay-confirm { padding-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+/* Outside the scrolling body: the way to send money is never below the fold. */
+.pay-confirm {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px var(--gutter) calc(var(--safe-b) + 14px);
+}
 .pay-warn { font-size: 13px; color: var(--warm); text-align: center; }
 
 .success {
@@ -510,7 +522,7 @@
      conversation list permanently on screen, a back arrow has nowhere to go. */
   .tabbar { display: none; }
   .screen-head .icon-btn[aria-label='Back'] { display: none; }
-  .screen-body, .home-body { padding-bottom: 28px; }
+  .screen-body, .has-tabbar .screen-body, .home-body { padding-bottom: 28px; }
   .home-head { padding-top: 22px; }
 
   /* Wide screens have room to breathe, but money should not become a billboard. */
