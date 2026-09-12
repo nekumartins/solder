@@ -223,6 +223,7 @@ Everything has a working default; see `.env.example`. The ones that matter:
 | --- | --- | --- |
 | `CHAIN` | `sim` | `sim`, `base`, `ethereum`, `sepolia`, `base-sepolia` |
 | `DAILY_SEND_LIMIT_USD` | `500` | Per-person cap, enforced server-side |
+| `DEMO_FUNDING` | `1` | Lets the simulated ledger hand out money. `0` removes the control and its endpoint. Forced off when `CHAIN != sim` |
 | `DEV_LOGIN` | `1` | Shortcut sign-in for tests. Ignored when `NODE_ENV=production` |
 | `RP_ID` / `ORIGIN` | unset | WebAuthn relying party. Unset, it follows the domain serving each request; set, it pins to that one. `ORIGIN` accepts a comma-separated list |
 

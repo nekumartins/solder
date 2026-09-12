@@ -8,12 +8,13 @@ import { asObject, micros } from '../validate.js';
 const MAX_TOP_UP = 500_000_000n; // $500 a go
 
 /**
- * Demo money, only on the local simulated ledger. On a real cluster the
- * adapter cannot mint anything, so this route is not registered at all.
+ * Demo money, only on the local simulated ledger and only while DEMO_FUNDING
+ * says so. On a real network the adapter cannot mint anything, so the route is
+ * not registered at all — there is no way to leave it open by accident.
  */
 export async function devRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
-  const { store, chain } = ctx;
-  if (!chain.canFund || !chain.fund) return;
+  const { store, chain, config } = ctx;
+  if (!chain.canFund || !chain.fund || !config.demoFunding) return;
 
   app.post('/api/dev/fund', async (request) => {
     const user = requireUser(store, request);

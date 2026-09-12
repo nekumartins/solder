@@ -265,3 +265,27 @@ test('payments settle from pending to confirmed on their own', async (t) => {
   assert.equal(thread.events.at(-1).status, 'confirmed');
   assert.ok(thread.events.at(-1).confirmedAt > 0);
 });
+
+test('turning demo funding off leaves no way to mint money', async (t) => {
+  const app = await harness({ demoFunding: false });
+  t.after(() => app.close());
+
+  const ana = await app.actor('ana', 'Ana Ruiz');
+
+  // The button is gone from the interface...
+  assert.equal((await ana.call('GET', '/api/me')).canFund, false);
+  // ...and so is the endpoint behind it, not merely hidden.
+  const response = await ana.raw('POST', '/api/dev/fund', { micros: '25000000' });
+  assert.equal(response.statusCode, 404);
+  assert.equal(await ana.balance(), 0n);
+});
+
+test('demo funding is on by default, so the simulated ledger is usable', async (t) => {
+  const app = await harness();
+  t.after(() => app.close());
+
+  const ana = await app.actor('ana', 'Ana Ruiz');
+  assert.equal((await ana.call('GET', '/api/me')).canFund, true);
+  await ana.fund('25');
+  assert.equal(formatUsd(await ana.balance()), '$25.00');
+});

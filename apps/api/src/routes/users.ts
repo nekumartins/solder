@@ -26,7 +26,7 @@ export async function userRoutes(app: FastifyInstance, ctx: AppContext): Promise
       dailyRemainingMicros: (remaining > 0n ? remaining : 0n).toString(),
       chain: config.chain,
       devLogin: config.devLogin,
-      canFund: chain.canFund,
+      canFund: chain.canFund && config.demoFunding,
     };
   });
 

@@ -42,7 +42,6 @@ export const COPY = {
     groups: 'Groups',
     empty: 'No conversations yet',
     emptySub: 'Send a friend a few dollars to get started.',
-    addMoney: 'Add money',
   },
   thread: {
     placeholder: 'Message',

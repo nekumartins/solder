@@ -27,6 +27,13 @@ export interface Config {
   dailySendLimitMicros: bigint;
   /** Requests per minute per IP. Test runs all share 127.0.0.1, so they raise it. */
   rateLimitMax: number;
+  /**
+   * Whether the simulated ledger will hand out money on request. It is the one
+   * thing that makes a deployment a demo rather than a product, so it is its
+   * own switch rather than something `CHAIN=sim` quietly implies. A real
+   * network cannot mint, so it is forced off there whatever this says.
+   */
+  demoFunding: boolean;
   /** Serve the built PWA from this server too, making one container the whole app. */
   serveWeb: boolean;
   webRoot: string;
@@ -83,6 +90,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     devLogin: env('DEV_LOGIN', '1') === '1' && !isProduction,
     dailySendLimitMicros: BigInt(env('DAILY_SEND_LIMIT_USD', '500')) * 1_000_000n,
     rateLimitMax: Number(env('RATE_LIMIT_MAX', '120')),
+    demoFunding: env('DEMO_FUNDING', '1') === '1',
     serveWeb: env('SERVE_WEB', '0') === '1',
     webRoot: resolveFromRoot(env('WEB_ROOT', './apps/web/dist')),
     rpcUrl: process.env['RPC_URL'] || null,

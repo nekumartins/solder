@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { COPY } from '@solder/shared';
+import { api } from '../lib/api.js';
 import { Button } from '../components/Button.js';
 import { ExportKey } from '../components/ExportKey.js';
 import { Screen } from '../components/Screen.js';
@@ -29,6 +30,16 @@ export function Settings() {
     if (!me?.user.accountKey) return;
     await navigator.clipboard.writeText(me.user.accountKey);
     store.toast('Copied');
+  };
+
+  const addDemoMoney = async (): Promise<void> => {
+    try {
+      await api.post('/api/dev/fund', { micros: '25000000' });
+      await store.refreshMe();
+      store.toast('Added $25.00 of demo money');
+    } catch {
+      store.toast(COPY.errors.generic, 'bad');
+    }
   };
 
   return (
@@ -75,6 +86,12 @@ export function Settings() {
               <span>{COPY.settings.network}</span>
               <span className="row-value">{networkLabel(me?.chain)}</span>
             </div>
+            {me?.canFund && (
+              <button className="row-item row-button" onClick={addDemoMoney}>
+                <span>{COPY.settings.addDemoMoney}</span>
+                <span className="row-value">+$25.00</span>
+              </button>
+            )}
             <button className="row-item row-button" onClick={copyKey}>
               <span>{COPY.settings.accountKey}</span>
               <span className="row-value mono">{short(me?.user.accountKey)}</span>

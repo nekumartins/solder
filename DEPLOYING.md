@@ -124,6 +124,7 @@ Everything has a working default. These are the ones worth knowing:
 | `NODE_ENV` | `production` | Set by the image. Turns the dev sign-in off for good. |
 | `CHAIN` | `sim` | Or `base` / `ethereum` / `sepolia` / `base-sepolia`. |
 | `RPC_URL`, `RELAYER_PRIVATE_KEY` | — | Required unless `CHAIN=sim`. |
+| `DEMO_FUNDING` | `1` | Lets the simulated ledger hand out money. `0` removes the control and the endpoint. Forced off when `CHAIN != sim`. |
 | `DAILY_SEND_LIMIT_USD` | `500` | Per person, per day. |
 | `RATE_LIMIT_MAX` | `120` | Per IP, per minute. Leave it alone in production. |
 
@@ -147,11 +148,45 @@ npm run build
 SERVE_WEB=1 PORT=8080 ORIGIN=http://localhost:8080 npm start -w @solder/api
 ```
 
+## Taking it off demo
+
+Two separate switches, in this order.
+
+**1. Stop handing out money.** Set `DEMO_FUNDING=0`. The "Add demo money" control under
+Settings → Advanced disappears and so does `/api/dev/fund` — the route is not registered, so
+it is gone rather than hidden. Nothing else about the app changes.
+
+Be deliberate about *when*: on `CHAIN=sim` the demo funding is the only source of money, so
+turning it off leaves an app where a new account can never hold anything unless somebody who
+already has some sends it to them. That is the right state once real USDC is flowing, and a
+dead end before then. Flip it as part of step 2, not before.
+
+**2. Move onto real USDC.** Set these, and `DEMO_FUNDING` stops mattering — a real network
+cannot mint, so the funding route is refused regardless:
+
+| Variable | Value |
+| --- | --- |
+| `CHAIN` | `base-sepolia` first, then `base` |
+| `RPC_URL` | An HTTPS endpoint for that network — Alchemy, Infura, or the public one |
+| `RELAYER_PRIVATE_KEY` | 32-byte hex key of an account holding a little ETH on that network |
+
+The relayer pays gas and nothing else: it never holds anyone's USDC and, because an EIP-3009
+authorisation names both the recipient and the amount, it cannot redirect a payment. What it
+can do is have its gas drained, so fund it with a small amount and no more. `DAILY_SEND_LIMIT_USD`
+and the rate limits are what stand between it and someone doing that on purpose.
+
+People still need USDC to send. Nothing in this app can create it — on `base-sepolia` use
+Circle's faucet, and on `base` they have to already hold some.
+
+**Do `base-sepolia` before `base`.** The on-chain path is written and unit-tested against
+viem's own EIP-712 hashing, but it has never been run against a live network — this was built
+in a sandbox with no outbound access to any RPC. Testnet first is how you find out whether
+that is true in practice, at no cost.
+
 ## Before you point anyone at it
 
-- **`CHAIN=sim` mints demo money on request.** `/api/dev/fund` exists whenever the ledger is
-  the local simulated one, because that is what makes the demo work. Nobody can lose anything
-  real, but do not confuse it for a testnet.
+- **`CHAIN=sim` mints demo money on request** unless you set `DEMO_FUNDING=0`. Nobody can lose
+  anything real, but do not confuse it for a testnet.
 - **Read [SECURITY.md](SECURITY.md).** Particularly the relayer's exposure and what a claim
   link gives away. Fund the relayer with only what you can afford to lose.
 - **The on-chain path has never run against a real network.** See the README.

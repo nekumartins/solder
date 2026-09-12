@@ -17,16 +17,6 @@ export function Home() {
 
   const balance = BigInt(me?.balanceMicros ?? '0');
 
-  const addMoney = async (): Promise<void> => {
-    try {
-      await api.post('/api/dev/fund', { micros: '25000000' });
-      await store.refreshMe();
-      store.toast('Added $25.00 of demo money');
-    } catch {
-      store.toast(COPY.errors.generic, 'bad');
-    }
-  };
-
   return (
     <div className="screen home">
       <header className="home-head">
@@ -40,15 +30,12 @@ export function Home() {
       </header>
 
       <div className="scroll home-body">
+        {/* Topping up is a property of the demo ledger, not of having money —
+            it lives under Settings → Advanced with the rest of the machinery. */}
         <section className="balance-card">
           <p className="balance-label">{COPY.home.balanceLabel}</p>
           <p className="balance num">{formatUsd(balance)}</p>
           <p className="balance-sub">{COPY.home.balanceSub}</p>
-          {me?.canFund && (
-            <button className="chip chip-ghost balance-add" onClick={addMoney}>
-              + {COPY.home.addMoney}
-            </button>
-          )}
         </section>
 
         <nav className="actions" aria-label="Quick actions">
