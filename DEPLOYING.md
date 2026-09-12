@@ -1,10 +1,14 @@
 # Deploying Solder
 
-**The short version:** Vercel hosts the PWA beautifully, but the API cannot run there as
-written. Deploy the web app to Vercel and the API to any host that runs a normal Node
-process, then point one at the other. Both halves are set up for you below.
+**The short version:** the API needs a host that runs an ordinary Node process, because it
+keeps a SQLite file, holds connections open, and runs a background watcher. Vercel cannot do
+that; Railway, Fly and Render can.
 
-If you would rather have one thing to deploy, skip to [One container](#one-container).
+**The fastest working deployment is one service on Railway** — it serves the PWA and the API
+together on one origin, with nothing to proxy. Skip to
+[Railway from GitHub](#the-api-half-railway-from-github).
+
+Using Vercel for the front end as well works too, and is set up below.
 
 ## Why the API is not serverless
 
@@ -59,44 +63,70 @@ so that no longer errors — but it cannot produce the web app either.
 Note that `apps/api` is not a Vercel target at all. It has no web output to serve, and it
 could not run there anyway — see the table above.
 
-## The API half
+## The API half: Railway from GitHub
 
-Any host that runs a container and can mount a disk: Fly.io, Railway, Render, a VPS. The
-`Dockerfile` at the repo root builds and runs it.
+`railway.json` pins the build to the `Dockerfile` and points the healthcheck at `/api/health`,
+so this is close to click-and-wait.
 
-```bash
-fly launch --dockerfile Dockerfile
-fly volumes create solder_data --size 1     # SQLite lives here
-fly secrets set ORIGIN=https://your-app.vercel.app RP_ID=your-app.vercel.app
-```
+1. **New Project → Deploy from GitHub repo**, pick this repo and the branch.
+2. Railway reads `railway.json`, builds the `Dockerfile`, and waits for `/api/health`.
+3. **Settings → Networking → Generate Domain.**
 
-**Mount the volume at `/app/data`.** Without it the database is inside the image and every
-deploy silently resets everyone's balance.
+That is enough for a working app. The image sets `SERVE_WEB=1`, so the service serves the PWA
+as well as the API — **the Railway URL on its own is the whole thing**, on one origin, with
+nothing to proxy and no Vercel involved.
+
+You do not need to set `ORIGIN` or `RP_ID`. The server reads `RAILWAY_PUBLIC_DOMAIN`, which
+Railway injects, and derives both from it — so passkeys and the session cookie bind to the
+domain it just gave you. Setting either by hand always wins.
+
+### Add a volume, or the ledger resets
+
+**Settings → Volumes → add one, mounted at `/app/data`.**
+
+Without it SQLite lives inside the container, and every redeploy silently starts everyone
+back at zero. It will appear to work, which is what makes it worth doing first.
+
+### If you also want the Vercel front end
+
+Only then do you need to set things by hand, because the domain people visit is no longer the
+one Railway named:
+
+| On Railway | Set to |
+| --- | --- |
+| `ORIGIN` | `https://your-app.vercel.app` |
+| `RP_ID` | `your-app.vercel.app` |
+
+and point the `/api/:path*` rewrite in `vercel.json` at the Railway domain. Passkeys bind to
+one domain, so pick which one is the real front door before anyone signs up — an account made
+on the Railway URL will not work on the Vercel one.
+
+### About the free tier
+
+Railway retired its perpetual free tier; what is on offer is a limited trial credit, and
+volumes may need a paid plan. Check before relying on it. The same `Dockerfile` runs on
+Fly.io or Render unchanged — note that Render's free instances have no persistent disk, so
+the ledger would reset there for the same reason a missing volume does here.
 
 ### Environment
 
-| Variable | Set it to | Why |
+Everything has a working default. These are the ones worth knowing:
+
+| Variable | Default | Notes |
 | --- | --- | --- |
-| `NODE_ENV` | `production` | Turns the dev sign-in off for good, whatever `DEV_LOGIN` says. |
-| `ORIGIN` | `https://your-app.vercel.app` | WebAuthn checks it, and it decides whether the cookie is `Secure`. Comma-separated for more than one. |
-| `RP_ID` | `your-app.vercel.app` | The passkey's domain. **No scheme, no port.** |
-| `DATABASE_PATH` | `/app/data/solder.db` | On the mounted volume. |
-| `CHAIN` | `sim`, or `base` / `ethereum` / `sepolia` / `base-sepolia` | |
-| `RPC_URL`, `RELAYER_PRIVATE_KEY` | your own | Required unless `CHAIN=sim`. |
+| `PORT` | injected by the host | Falls back to 8787. The app binds `0.0.0.0`. |
+| `ORIGIN` | `https://$RAILWAY_PUBLIC_DOMAIN` | WebAuthn checks it, and it decides whether the cookie is `Secure`. Comma-separated for more than one. |
+| `RP_ID` | `$RAILWAY_PUBLIC_DOMAIN` | The passkey's domain. **No scheme, no port.** |
+| `DATABASE_PATH` | `/app/data/solder.db` | Set by the image. Mount the volume there. |
+| `NODE_ENV` | `production` | Set by the image. Turns the dev sign-in off for good. |
+| `CHAIN` | `sim` | Or `base` / `ethereum` / `sepolia` / `base-sepolia`. |
+| `RPC_URL`, `RELAYER_PRIVATE_KEY` | — | Required unless `CHAIN=sim`. |
 | `DAILY_SEND_LIMIT_USD` | `500` | Per person, per day. |
 | `RATE_LIMIT_MAX` | `120` | Per IP, per minute. Leave it alone in production. |
 
-### Passkeys are bound to a domain
+## One container, anywhere
 
-A passkey created on `solder-abc123.vercel.app` will not work on `solder.vercel.app`. Decide
-the domain before anyone signs up, and set `RP_ID` to the bare domain people will actually
-visit. Preview deployments each get their own hostname, so accounts made on one do not carry
-across — expected, not a bug.
-
-## One container
-
-The API can serve the built PWA itself, which makes a single container the whole app — no
-Vercel, one origin, nothing to proxy:
+The same image runs outside Railway:
 
 ```bash
 docker build -t solder .
@@ -105,10 +135,9 @@ docker run -p 8787:8787 -v solder-data:/app/data \
   solder
 ```
 
-`SERVE_WEB=1` is already set in the image. Client-side routes fall through to the app shell;
-unknown `/api` paths return JSON, not HTML.
+Client-side routes fall through to the app shell; unknown `/api` paths return JSON, not HTML.
 
-Locally:
+Locally, without Docker:
 
 ```bash
 npm run build

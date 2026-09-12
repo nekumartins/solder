@@ -31,6 +31,21 @@ export interface Config {
 
 const NETWORKS: ChainKind[] = ['sim', 'ethereum', 'sepolia', 'base', 'base-sepolia'];
 
+/**
+ * Hosts that give a service its own hostname publish it as an environment
+ * variable. Using it means a first deploy works before anyone has configured
+ * anything — passkeys and the session cookie bind to the domain the app is
+ * actually served from. An explicit ORIGIN or RP_ID always wins.
+ */
+function publicDomain(): string {
+  return (
+    process.env['RAILWAY_PUBLIC_DOMAIN'] ||
+    process.env['RENDER_EXTERNAL_HOSTNAME'] ||
+    process.env['PUBLIC_DOMAIN'] ||
+    ''
+  ).replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
 function resolveFromRoot(path: string): string {
   return path === ':memory:' ? path : resolve(REPO_ROOT, path);
 }
@@ -47,12 +62,13 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     throw new Error(`CHAIN must be one of ${NETWORKS.join(', ')} (got "${chain}")`);
   }
 
-  const origin = env('ORIGIN', 'http://localhost:5173');
+  const domain = publicDomain();
+  const origin = env('ORIGIN', domain ? `https://${domain}` : 'http://localhost:5173');
   const config: Config = {
     port: Number(env('PORT', '8787')),
     chain,
     databasePath: resolveFromRoot(env('DATABASE_PATH', './data/solder.db')),
-    rpId: env('RP_ID', 'localhost'),
+    rpId: env('RP_ID', domain || 'localhost'),
     origins: origin.split(',').map((o) => o.trim()).filter(Boolean),
     sessionTtlMs: Number(env('SESSION_TTL_DAYS', '30')) * 24 * 60 * 60 * 1000,
     // The dev shortcut sign-in can never be enabled in production, whatever the env says.

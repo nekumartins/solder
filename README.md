@@ -228,13 +228,16 @@ Everything has a working default; see `.env.example`. The ones that matter:
 
 ## Hosting it
 
-[DEPLOYING.md](DEPLOYING.md) has the steps. The short version: Vercel serves the PWA
-(`vercel.json` is ready; one placeholder to fill in), and the API needs an ordinary
-always-on Node process — it keeps a SQLite file, holds SSE connections open, and runs a
-watcher that advances payments to confirmed, none of which survive a serverless invocation.
+[DEPLOYING.md](DEPLOYING.md) has the steps. The fastest working deployment is one service on
+Railway, straight from GitHub: `railway.json` pins the build to the `Dockerfile`, the image
+serves the PWA and the API together on one origin, and the server derives its WebAuthn domain
+from the hostname Railway assigns — so a first deploy needs no configuration at all. Add a
+volume at `/app/data` or every redeploy resets the ledger.
 
-Or run the whole thing as one container: the API can serve the built PWA itself, which keeps
-everything on a single origin and leaves nothing to proxy.
+Vercel can serve the PWA instead (`vercel.json` is ready, one placeholder to fill in), but the
+API still needs an always-on Node process: it keeps a SQLite file, holds SSE connections open,
+and runs a watcher that advances payments to confirmed, none of which survive a serverless
+invocation.
 
 ## Not built yet
 

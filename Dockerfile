@@ -17,8 +17,9 @@ RUN npm run build
 
 # SQLite lives here. Mount a volume at /app/data or the ledger resets on deploy.
 ENV DATABASE_PATH=/app/data/solder.db
+# Serve the PWA from here too, so this one service is the whole app.
 ENV SERVE_WEB=1
-ENV PORT=8787
+# PORT is left to the host to inject; the app falls back to 8787 on its own.
 EXPOSE 8787
 
 # tsx runs the TypeScript directly; there is no separate compile step to keep
